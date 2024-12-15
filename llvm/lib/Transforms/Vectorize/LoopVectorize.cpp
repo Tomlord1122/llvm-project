@@ -4312,7 +4312,7 @@ bool LoopVectorizationPlanner::isMoreProfitable(
     const VectorizationFactor &A, const VectorizationFactor &B) const {
   InstructionCost CostA = A.Cost;
   InstructionCost CostB = B.Cost;
-
+  // Predicated Scalar Evolution
   unsigned MaxTripCount = PSE.getSE()->getSmallConstantMaxTripCount(OrigLoop);
 
   // Improve estimate for the vector width if it is scalable.
@@ -4328,19 +4328,27 @@ bool LoopVectorizationPlanner::isMoreProfitable(
   // Assume vscale may be larger than 1 (or the value being tuned for),
   // so that scalable vectorization is slightly favorable over fixed-width
   // vectorization.
-  bool PreferScalable = !TTI.preferFixedOverScalableIfEqualCost() &&
-                        A.Width.isScalable() && !B.Width.isScalable();
+
+  // Original code -> If false, then we prefer fixed-width vectorization over scalable vectorization
+  // bool PreferScalable = !TTI.preferFixedOverScalableIfEqualCost() &&
+  //                       A.Width.isScalable() && !B.Width.isScalable();
+
+  bool PreferScalable = false;
 
   auto CmpFn = [PreferScalable](const InstructionCost &LHS,
                                 const InstructionCost &RHS) {
+    // The RHS is the fixed-width vectorization factor
     return PreferScalable ? LHS <= RHS : LHS < RHS;
   };
 
   // To avoid the need for FP division:
   //      (CostA / EstimatedWidthA) < (CostB / EstimatedWidthB)
   // <=>  (CostA * EstimatedWidthB) < (CostB * EstimatedWidthA)
-  if (!MaxTripCount)
+  if (!MaxTripCount){
+    llvm::outs() << "CostA * EstimatedWidthB: " << CostA * EstimatedWidthB << ", CostB * EstimatedWidthA: " << CostB * EstimatedWidthA << "\n";
     return CmpFn(CostA * EstimatedWidthB, CostB * EstimatedWidthA);
+  }
+
 
   auto GetCostForTC = [MaxTripCount, this](unsigned VF,
                                            InstructionCost VectorCost,
@@ -4349,8 +4357,8 @@ bool LoopVectorizationPlanner::isMoreProfitable(
     // will be rounded up to an integer number of iterations under
     // FoldTailByMasking. The total cost in that case will be
     // VecCost*ceil(TripCount/VF). When not folding the tail, the total
-    // cost will be VecCost*floor(TC/VF) + ScalarCost*(TC%VF). There will be
-    // some extra overheads, but for the purpose of comparing the costs of
+    // cost will be VecCost*floor(TC/VF) -> Vector loop cost + ScalarCost*(TC%VF) -> Tail loop cost. 
+    // There will be some extra overheads, but for the purpose of comparing the costs of
     // different VFs we can use this to compare the total loop-body cost
     // expected after vectorization.
     if (CM.foldTailByMasking())
@@ -4360,6 +4368,7 @@ bool LoopVectorizationPlanner::isMoreProfitable(
 
   auto RTCostA = GetCostForTC(EstimatedWidthA, CostA, A.ScalarCost);
   auto RTCostB = GetCostForTC(EstimatedWidthB, CostB, B.ScalarCost);
+  llvm::outs() << "RTCostA: " << RTCostA << ", RTCostB: " << RTCostB << "\n";
   return CmpFn(RTCostA, RTCostB);
 }
 
@@ -4540,7 +4549,7 @@ VectorizationFactor LoopVectorizationPlanner::selectVectorizationFactor() {
   const VectorizationFactor ScalarCost(ElementCount::getFixed(1), ExpectedCost,
                                        ExpectedCost);
   VectorizationFactor ChosenFactor = ScalarCost;
-
+  // FK means force kind of vectorization
   bool ForceVectorization = Hints.getForce() == LoopVectorizeHints::FK_Enabled;
   if (ForceVectorization &&
       (VPlans.size() > 1 || !VPlans[0]->hasScalarVFOnly())) {
@@ -4549,7 +4558,7 @@ VectorizationFactor LoopVectorizationPlanner::selectVectorizationFactor() {
     // evaluation.
     ChosenFactor.Cost = InstructionCost::getMax();
   }
-
+  // SmallVector is a LLVM version of std::vector
   SmallVector<InstructionVFPair> InvalidCosts;
   for (auto &P : VPlans) {
     for (ElementCount VF : P->vectorFactors()) {
@@ -4586,10 +4595,16 @@ VectorizationFactor LoopVectorizationPlanner::selectVectorizationFactor() {
       }
 
       // If profitable add it to ProfitableVF list.
+      // 這邊遠永都跟ScalarCost比較，看Candidate是否比ScalarCost更划算
       if (isMoreProfitable(Candidate, ScalarCost))
+      llvm::outs() << "isMoreProfitable with Candidate and ScalarCost" << "\n";
+        // ProfitableVFs will be used at selectEpilogueVectorizationFactor
         ProfitableVFs.push_back(Candidate);
 
+      // 這邊遠永都跟ChosenFactor比較，看Candidate是否比ChosenFactor更划算
+      // 如果更划算，就更新ChosenFactor
       if (isMoreProfitable(Candidate, ChosenFactor))
+        llvm::outs() << "isMoreProfitable with Candidate and ChosenFactor" << "\n";
         ChosenFactor = Candidate;
     }
   }
