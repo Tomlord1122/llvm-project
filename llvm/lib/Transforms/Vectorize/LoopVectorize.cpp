@@ -4319,10 +4319,19 @@ bool LoopVectorizationPlanner::isMoreProfitable(
   unsigned EstimatedWidthA = A.Width.getKnownMinValue();
   unsigned EstimatedWidthB = B.Width.getKnownMinValue();
   if (std::optional<unsigned> VScale = getVScaleForTuning(OrigLoop, TTI)) {
-    if (A.Width.isScalable())
+    if (A.Width.isScalable()) {
+      llvm::outs() << "A is scalable.\t";
       EstimatedWidthA *= *VScale;
-    if (B.Width.isScalable())
+    } else {
+      llvm::outs() << "A is not scalable.\t";
+    }
+    if (B.Width.isScalable()) {
+      llvm::outs() << "B is scalable.\t";
       EstimatedWidthB *= *VScale;
+    } else {
+      llvm::outs() << "B is not scalable.\t";
+    }
+    llvm::outs() << "\n";
   }
 
   // Assume vscale may be larger than 1 (or the value being tuned for),
@@ -4330,10 +4339,9 @@ bool LoopVectorizationPlanner::isMoreProfitable(
   // vectorization.
 
   // Original code -> If false, then we prefer fixed-width vectorization over scalable vectorization
-  // bool PreferScalable = !TTI.preferFixedOverScalableIfEqualCost() &&
-  //                       A.Width.isScalable() && !B.Width.isScalable();
-
-  bool PreferScalable = false;
+  bool PreferScalable = !TTI.preferFixedOverScalableIfEqualCost() &&
+                        A.Width.isScalable() && !B.Width.isScalable();
+  // PreferScalable = false;
 
   auto CmpFn = [PreferScalable](const InstructionCost &LHS,
                                 const InstructionCost &RHS) {
@@ -4345,6 +4353,8 @@ bool LoopVectorizationPlanner::isMoreProfitable(
   //      (CostA / EstimatedWidthA) < (CostB / EstimatedWidthB)
   // <=>  (CostA * EstimatedWidthB) < (CostB * EstimatedWidthA)
   if (!MaxTripCount){
+    llvm::outs() << "A VF: " << A.Width << ", EstimatedWidthA: " << EstimatedWidthA << ", CostA: " << CostA << "\n";
+    llvm::outs() << "B VF: " << B.Width << ", EstimatedWidthB: " << EstimatedWidthB << ", CostB: " << CostB << "\n";
     llvm::outs() << "CostA * EstimatedWidthB: " << CostA * EstimatedWidthB << ", CostB * EstimatedWidthA: " << CostB * EstimatedWidthA << "\n";
     return CmpFn(CostA * EstimatedWidthB, CostB * EstimatedWidthA);
   }
@@ -4596,16 +4606,21 @@ VectorizationFactor LoopVectorizationPlanner::selectVectorizationFactor() {
 
       // If profitable add it to ProfitableVF list.
       // 這邊遠永都跟ScalarCost比較，看Candidate是否比ScalarCost更划算
-      if (isMoreProfitable(Candidate, ScalarCost))
-      llvm::outs() << "isMoreProfitable with Candidate and ScalarCost" << "\n";
+      if (isMoreProfitable(Candidate, ScalarCost)){
+        llvm::outs() << "Candidate VF: " << Candidate.Width << " is more profitable than ScalarCost VF: " << ScalarCost.Width << "\n";
         // ProfitableVFs will be used at selectEpilogueVectorizationFactor
         ProfitableVFs.push_back(Candidate);
+      }
+      
 
       // 這邊遠永都跟ChosenFactor比較，看Candidate是否比ChosenFactor更划算
       // 如果更划算，就更新ChosenFactor
-      if (isMoreProfitable(Candidate, ChosenFactor))
-        llvm::outs() << "isMoreProfitable with Candidate and ChosenFactor" << "\n";
+      if (isMoreProfitable(Candidate, ChosenFactor)){
+        llvm::outs() << "Update Chosen Factor with Candidate VF: " << Candidate.Width << " and ChosenFactor VF: " << ChosenFactor.Width << "\n";
         ChosenFactor = Candidate;
+      }
+      
+        
     }
   }
 
