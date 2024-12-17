@@ -4341,7 +4341,7 @@ bool LoopVectorizationPlanner::isMoreProfitable(
   // Original code -> If false, then we prefer fixed-width vectorization over scalable vectorization
   bool PreferScalable = !TTI.preferFixedOverScalableIfEqualCost() &&
                         A.Width.isScalable() && !B.Width.isScalable();
-  // PreferScalable = false;
+  PreferScalable = false;
 
   auto CmpFn = [PreferScalable](const InstructionCost &LHS,
                                 const InstructionCost &RHS) {
@@ -4350,12 +4350,14 @@ bool LoopVectorizationPlanner::isMoreProfitable(
   };
 
   // To avoid the need for FP division:
-  //      (CostA / EstimatedWidthA) < (CostB / EstimatedWidthB)
+  // 這兩個式子是等價的，把除數乘過去，就可以避免浮點數運算
+  // (CostA / EstimatedWidthA) < (CostB / EstimatedWidthB)
   // <=>  (CostA * EstimatedWidthB) < (CostB * EstimatedWidthA)
   if (!MaxTripCount){
     llvm::outs() << "A VF: " << A.Width << ", EstimatedWidthA: " << EstimatedWidthA << ", CostA: " << CostA << "\n";
     llvm::outs() << "B VF: " << B.Width << ", EstimatedWidthB: " << EstimatedWidthB << ", CostB: " << CostB << "\n";
     llvm::outs() << "CostA * EstimatedWidthB: " << CostA * EstimatedWidthB << ", CostB * EstimatedWidthA: " << CostB * EstimatedWidthA << "\n";
+    // The loop in this case maybe is a infinite loop, or a loop with trip count is not known at compile time
     return CmpFn(CostA * EstimatedWidthB, CostB * EstimatedWidthA);
   }
 
@@ -4375,7 +4377,7 @@ bool LoopVectorizationPlanner::isMoreProfitable(
       return VectorCost * divideCeil(MaxTripCount, VF);
     return VectorCost * (MaxTripCount / VF) + ScalarCost * (MaxTripCount % VF);
   };
-
+  // RTCost is run-time cost
   auto RTCostA = GetCostForTC(EstimatedWidthA, CostA, A.ScalarCost);
   auto RTCostB = GetCostForTC(EstimatedWidthB, CostB, B.ScalarCost);
   llvm::outs() << "RTCostA: " << RTCostA << ", RTCostB: " << RTCostB << "\n";
@@ -4702,6 +4704,7 @@ bool LoopVectorizationCostModel::isEpilogueVectorizationProfitable(
 VectorizationFactor LoopVectorizationPlanner::selectEpilogueVectorizationFactor(
     const ElementCount MainLoopVF, unsigned IC) {
   VectorizationFactor Result = VectorizationFactor::Disabled();
+  // Default is enabled.
   if (!EnableEpilogueVectorization) {
     LLVM_DEBUG(dbgs() << "LEV: Epilogue vectorization is disabled.\n");
     return Result;
@@ -10303,6 +10306,11 @@ PreservedAnalyses LoopVectorizePass::run(Function &F,
     } else {
       PA.preserveSet<CFGAnalyses>();
     }
+    llvm::outs() << "================================================\n";
+    llvm::outs() << "Loops Vectorized: " << LoopsVectorized << "\n"
+                 << "Loops Analyzed: " << LoopsAnalyzed << "\n"
+                 << "Loops Epilogues Vectorized: " << LoopsEpilogueVectorized << "\n";
+    llvm::outs() << "================================================\n";
     return PA;
 }
 
