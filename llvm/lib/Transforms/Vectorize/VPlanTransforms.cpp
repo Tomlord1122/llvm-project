@@ -668,7 +668,7 @@ static void recursivelyDeleteDeadRecipes(VPValue *V) {
     R->eraseFromParent();
   }
 }
-
+// 優化向量化計劃（VPlan）中的循環終止條件
 void VPlanTransforms::optimizeForVFAndUF(VPlan &Plan, ElementCount BestVF,
                                          unsigned BestUF,
                                          PredicatedScalarEvolution &PSE) {

@@ -7355,9 +7355,12 @@ LoopVectorizationPlanner::executePlan(
   LLVM_DEBUG(dbgs() << "Executing best plan with VF=" << BestVF
                     << ", UF=" << BestUF << '\n');
   llvm::outs() << "Executing best plan with VF=" << BestVF
-               << ", UF=" << BestUF << "\n";
-  llvm::outs() << "================ VPlan ================\n\n";
+               << ", UF=" << BestUF << " at function: " << OrigLoop->getHeader()->getParent()->getName() << " at line: " << OrigLoop->getLocStr() << "\n";
+  
   BestVPlan.setName("Final VPlan");
+  llvm::outs() << "================ Final VPlan ================\n";
+  BestVPlan.print(llvm::outs());
+  llvm::outs() << "================ Final VPlan ================\n\n";
   LLVM_DEBUG(BestVPlan.dump());
 
   // Perform the actual loop transformation.
