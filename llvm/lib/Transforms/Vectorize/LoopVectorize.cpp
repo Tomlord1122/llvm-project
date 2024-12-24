@@ -4339,10 +4339,15 @@ bool LoopVectorizationPlanner::isMoreProfitable(
   // vectorization.
 
   // Original code -> If false, then we prefer fixed-width vectorization over scalable vectorization
-  bool PreferScalable = !TTI.preferFixedOverScalableIfEqualCost() &&
-                        A.Width.isScalable() && !B.Width.isScalable();
-  PreferScalable = false;
-
+  // bool PreferScalable = !TTI.preferFixedOverScalableIfEqualCost() && A.Width.isScalable() && !B.Width.isScalable();
+  
+  bool PreferScalable = true;
+  if (A.Width.isScalable() && !B.Width.isScalable())
+  {
+    PreferScalable = !TTI.preferFixedOverScalableIfEqualCost();
+    // PreferScalable = false;
+  }
+  
   auto CmpFn = [PreferScalable](const InstructionCost &LHS,
                                 const InstructionCost &RHS) {
     // The RHS is the fixed-width vectorization factor
