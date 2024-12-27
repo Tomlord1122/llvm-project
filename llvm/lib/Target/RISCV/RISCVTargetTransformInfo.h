@@ -337,7 +337,7 @@ public:
       return 1;
     // If the loop will not be vectorized, don't interleave the loop.
     // Let regular unroll to unroll the loop.
-    return VF.isScalar() ? 1 : ST->getMaxInterleaveFactor();
+    return VF.isScalar() ? 1 : ST->getMaxInterleaveFactor(); // ST->getMaxInterleaveFactor() return 2
   }
 
   bool enableInterleavedAccessVectorization() { return true; }

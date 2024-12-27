@@ -306,11 +306,14 @@ std::optional<unsigned> RISCVTTIImpl::getMaxVScale() const {
 }
 
 std::optional<unsigned> RISCVTTIImpl::getVScaleForTuning() const {
+  // Check if the target has vector instructions
   if (ST->hasVInstructions())
+    // get the minimum vector length
     if (unsigned MinVLen = ST->getRealMinVLen();
         MinVLen >= RISCV::RVVBitsPerBlock)
+      // return the vscale value
       return MinVLen / RISCV::RVVBitsPerBlock;
-  return BaseT::getVScaleForTuning();
+  return BaseT::getVScaleForTuning(); // return std::nullopt
 }
 
 TypeSize

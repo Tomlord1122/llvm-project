@@ -4620,7 +4620,7 @@ VectorizationFactor LoopVectorizationPlanner::selectVectorizationFactor() {
       }
       
 
-      // 這邊遠永都跟ChosenFactor比較，看Candidate是否比ChosenFactor更划算
+      // 這邊永遠都跟ChosenFactor比較，看Candidate是否比ChosenFactor更划算
       // 如果更划算，就更新ChosenFactor
       if (isMoreProfitable(Candidate, ChosenFactor)){
         llvm::outs() << "Update Chosen Factor with Candidate VF: " << Candidate.Width << " and ChosenFactor VF: " << ChosenFactor.Width << "\n";
@@ -4690,6 +4690,7 @@ bool LoopVectorizationCostModel::isEpilogueVectorizationProfitable(
   // with vectorization factors larger than a certain value.
 
   // Allow the target to opt out entirely.
+  // Base function is true 
   if (!TTI.preferEpilogueVectorization())
     return false;
 
@@ -4698,9 +4699,10 @@ bool LoopVectorizationCostModel::isEpilogueVectorizationProfitable(
   if (TTI.getMaxInterleaveFactor(VF) <= 1)
     return false;
 
+  // ARM will pass the above two conditions, the preferEpilogueVectorization return default true, and getMaxInterleaveFactor(VF) = 2
   unsigned Multiplier = 1;
   if (VF.isScalable())
-    Multiplier = getVScaleForTuning(TheLoop, TTI).value_or(1);
+    Multiplier = getVScaleForTuning(TheLoop, TTI).value_or(1); // ARM return 2, RISCV return 1 or 2 or nullopt
   if ((Multiplier * VF.getKnownMinValue()) >= EpilogueVectorizationMinVF)
     return true;
   return false;
@@ -4712,12 +4714,15 @@ VectorizationFactor LoopVectorizationPlanner::selectEpilogueVectorizationFactor(
   // Default is enabled.
   if (!EnableEpilogueVectorization) {
     LLVM_DEBUG(dbgs() << "LEV: Epilogue vectorization is disabled.\n");
+    llvm::outs() << "LEV: Epilogue vectorization is disabled.\n";
     return Result;
   }
-
+  // 這邊是檢查是否允許epilogue vectorization
   if (!CM.isScalarEpilogueAllowed()) {
     LLVM_DEBUG(dbgs() << "LEV: Unable to vectorize epilogue because no "
                          "epilogue is allowed.\n");
+    llvm::outs() << "LEV: Unable to vectorize epilogue because no "
+                         "epilogue is allowed.\n";
     return Result;
   }
 
@@ -4726,17 +4731,22 @@ VectorizationFactor LoopVectorizationPlanner::selectEpilogueVectorizationFactor(
   if (!isCandidateForEpilogueVectorization(MainLoopVF)) {
     LLVM_DEBUG(dbgs() << "LEV: Unable to vectorize epilogue because the loop "
                          "is not a supported candidate.\n");
+    llvm::outs() << "LEV: Unable to vectorize epilogue because the loop "
+                         "is not a supported candidate.\n";
     return Result;
   }
 
   if (EpilogueVectorizationForceVF > 1) {
     LLVM_DEBUG(dbgs() << "LEV: Epilogue vectorization factor is forced.\n");
+    llvm::outs() << "LEV: Epilogue vectorization factor is forced.\n";
     ElementCount ForcedEC = ElementCount::getFixed(EpilogueVectorizationForceVF);
     if (hasPlanWithVF(ForcedEC))
       return {ForcedEC, 0, 0};
     else {
       LLVM_DEBUG(dbgs() << "LEV: Epilogue vectorization forced factor is not "
                            "viable.\n");
+      llvm::outs() << "LEV: Epilogue vectorization forced factor is not "
+                           "viable.\n";
       return Result;
     }
   }
@@ -4745,12 +4755,13 @@ VectorizationFactor LoopVectorizationPlanner::selectEpilogueVectorizationFactor(
       OrigLoop->getHeader()->getParent()->hasMinSize()) {
     LLVM_DEBUG(
         dbgs() << "LEV: Epilogue vectorization skipped due to opt for size.\n");
+    llvm::outs() << "LEV: Epilogue vectorization skipped due to opt for size.\n";
     return Result;
   }
 
   if (!CM.isEpilogueVectorizationProfitable(MainLoopVF)) {
-    LLVM_DEBUG(dbgs() << "LEV: Epilogue vectorization is not profitable for "
-                         "this loop\n");
+    LLVM_DEBUG(dbgs() << "LEV: Epilogue vectorization is not profitable for this loop\n");
+    llvm::outs() << "LEV: Epilogue vectorization is not profitable for this loop\n";
     return Result;
   }
 
@@ -4799,9 +4810,13 @@ VectorizationFactor LoopVectorizationPlanner::selectEpilogueVectorizationFactor(
       Result = NextVF;
   }
 
-  if (Result != VectorizationFactor::Disabled())
+  if (Result != VectorizationFactor::Disabled()){
     LLVM_DEBUG(dbgs() << "LEV: Vectorizing epilogue loop with VF = "
                       << Result.Width << "\n");
+    llvm::outs() << "LEV: Vectorizing epilogue loop with VF = "
+                      << Result.Width << " at function: " << OrigLoop->getHeader()->getParent()->getName() << " at line: " << OrigLoop->getLocStr() << "\n";
+  }
+   
   return Result;
 }
 
@@ -10014,6 +10029,7 @@ bool LoopVectorizePass::processLoop(Loop *L) {
   }
 
   bool DisableRuntimeUnroll = false;
+  // MDNode means metadata node
   MDNode *OrigLoopID = L->getLoopID();
   {
     using namespace ore;
@@ -10042,6 +10058,7 @@ bool LoopVectorizePass::processLoop(Loop *L) {
       // Consider vectorizing the epilogue too if it's profitable.
       VectorizationFactor EpilogueVF =
           LVP.selectEpilogueVectorizationFactor(VF.Width, IC);
+      llvm::outs() << "LEV: EpilogueVF.Width: " << EpilogueVF.Width << "\n";
       if (EpilogueVF.Width.isVector()) {
 
         // The first pass vectorizes the main loop and creates a scalar epilogue

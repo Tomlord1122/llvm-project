@@ -156,7 +156,7 @@ unsigned RISCVSubtarget::getMaxRVVVectorSizeInBits() const {
 unsigned RISCVSubtarget::getMinRVVVectorSizeInBits() const {
   assert(hasVInstructions() &&
          "Tried to get vector length without Zve or V extension support!");
-
+  // 4294967295
   if (RVVVectorBitsMin == -1U)
     return ZvlLen;
 

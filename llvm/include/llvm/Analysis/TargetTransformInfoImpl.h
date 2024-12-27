@@ -932,7 +932,7 @@ public:
   bool preferPredicatedReductionSelect(unsigned Opcode, Type *Ty,
                                        TTI::ReductionFlags Flags) const {
     return false;
-  }
+  } 
 
   bool preferEpilogueVectorization() const {
     return true;
