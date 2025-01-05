@@ -6950,6 +6950,7 @@ LoopVectorizationPlanner::plan(ElementCount UserVF, unsigned UserIC) {
     return std::nullopt;
 
   // Invalidate interleave groups if all blocks of loop will be predicated.
+  // 這樣代表所有blocks 都需要掩碼控制執行。
   if (CM.blockNeedsPredicationForAnyReason(OrigLoop->getHeader()) &&
       !useMaskedInterleavedAccesses(TTI)) {
     LLVM_DEBUG(
@@ -7803,6 +7804,7 @@ void EpilogueVectorizerEpilogueLoop::printDebugTracesAtEnd() {
   });
 }
 
+/// 回傳該 decision 合適的 VF 範圍
 bool LoopVectorizationPlanner::getDecisionAndClampRange(
     const std::function<bool(ElementCount)> &Predicate, VFRange &Range) {
   assert(!Range.isEmpty() && "Trying to test an empty VF range.");
@@ -8414,8 +8416,8 @@ VPRecipeBuilder::tryToCreateWidenRecipe(Instruction *Instr,
 void LoopVectorizationPlanner::buildVPlansWithVPRecipes(ElementCount MinVF,
                                                         ElementCount MaxVF) {
   assert(OrigLoop->isInnermost() && "Inner loop expected.");
-
   auto MaxVFTimes2 = MaxVF * 2;
+  // 實際上只會執行一次，因為這個最後 update condition 的時候，直接改成 SubRange.End 
   for (ElementCount VF = MinVF; ElementCount::isKnownLT(VF, MaxVFTimes2);) {
     VFRange SubRange = {VF, MaxVFTimes2};
     if (auto Plan = tryToBuildVPlanWithVPRecipes(SubRange)) {
@@ -9916,6 +9918,7 @@ bool LoopVectorizePass::processLoop(Loop *L) {
       hasBranchWeightMD(*L->getLoopLatch()->getTerminator());
   GeneratedRTChecks Checks(*PSE.getSE(), DT, LI, TTI,
                            F->getDataLayout(), AddBranchWeights);
+  // 代表有可能向量化，所以近一步算 IC 以及做一些 runtime check 計算運行時的效益
   if (MaybeVF) {
     VF = *MaybeVF;
     // Select the interleave count.
@@ -9949,6 +9952,7 @@ bool LoopVectorizePass::processLoop(Loop *L) {
   // Identify the diagnostic messages that should be produced.
   std::pair<StringRef, std::string> VecDiagMsg, IntDiagMsg;
   bool VectorizeLoop = true, InterleaveLoop = true;
+  // 以下的 if statement 會去判斷最後 VectorizeLoop 以及 InterleaveLoop bool 的值
   if (VF.Width.isScalar()) {
     LLVM_DEBUG(dbgs() << "LV: Vectorization is possible but not beneficial.\n");
     VecDiagMsg = std::make_pair(
