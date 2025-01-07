@@ -4339,14 +4339,14 @@ bool LoopVectorizationPlanner::isMoreProfitable(
   // vectorization.
 
   // Original code -> If false, then we prefer fixed-width vectorization over scalable vectorization
-  // bool PreferScalable = !TTI.preferFixedOverScalableIfEqualCost() && A.Width.isScalable() && !B.Width.isScalable();
+  bool PreferScalable = !TTI.preferFixedOverScalableIfEqualCost() && A.Width.isScalable() && !B.Width.isScalable();
   
-  bool PreferScalable = true;
-  if (A.Width.isScalable() && !B.Width.isScalable())
-  {
-    PreferScalable = !TTI.preferFixedOverScalableIfEqualCost();
-    // PreferScalable = false;
-  }
+  // bool PreferScalable = true;
+  // if (A.Width.isScalable() && !B.Width.isScalable())
+  // {
+  //   PreferScalable = !TTI.preferFixedOverScalableIfEqualCost();
+  //   // PreferScalable = false;
+  // }
   
   auto CmpFn = [PreferScalable](const InstructionCost &LHS,
                                 const InstructionCost &RHS) {
@@ -5564,7 +5564,7 @@ InstructionCost LoopVectorizationCostModel::expectedCost(
     llvm::outs() << "\n-----------------Function that is being costed:'"
                     << TheLoop->getHeader()->getParent()->getName() << "' from "
                     << TheLoop->getLocStr() << "-----------------\n";
-    LLVM_DEBUG(dbgs() << "\n-----------------Function that is being costed:'"
+    LLVM_DEBUG(dbgs() << "\n@@-----------------Function that is being costed:'"
                     << TheLoop->getHeader()->getParent()->getName() << "' from "
                     << TheLoop->getLocStr() << "-----------------\n");
     
@@ -5572,6 +5572,7 @@ InstructionCost LoopVectorizationCostModel::expectedCost(
     // For each instruction in the old loop.
     for (Instruction &I : BB->instructionsWithoutDebug()) {
       // Skip ignored values.
+      LLVM_DEBUG(dbgs() << "\n@@ Instruction: "<< I << '\n');
       if (ValuesToIgnore.count(&I) ||
           (VF.isVector() && VecValuesToIgnore.count(&I)))
         continue;
@@ -5579,7 +5580,7 @@ InstructionCost LoopVectorizationCostModel::expectedCost(
      
 
       InstructionCost C = getInstructionCost(&I, VF);
-
+      LLVM_DEBUG(dbgs() << "\n@@ getInstructionCost: "<< C << '\n');
       // Check if we should override the cost.
       if (C.isValid() && ForceTargetInstructionCost.getNumOccurrences() > 0)
         C = InstructionCost(ForceTargetInstructionCost);
@@ -6470,6 +6471,7 @@ LoopVectorizationCostModel::getInstructionCost(Instruction *I,
     // vectorized code depends on whether the corresponding memory instruction
     // is scalarized or not. Therefore, we handle GEPs with the memory
     // instruction cost.
+    LLVM_DEBUG(dbgs() << "\n@@ It's GEP" << '\n');
     return 0;
   case Instruction::Br: {
     // In cases of scalarized and predicated instructions, there will be VF
@@ -6478,6 +6480,7 @@ LoopVectorizationCostModel::getInstructionCost(Instruction *I,
     // Note that the conditional branch from the loop latch will be replaced by
     // a single branch controlling the loop, so there is no extra overhead from
     // scalarization.
+    LLVM_DEBUG(dbgs() << "\n@@ It's Br" << '\n');
     bool ScalarPredicatedBB = false;
     BranchInst *BI = cast<BranchInst>(I);
     if (VF.isVector() && BI->isConditional() &&
@@ -6493,6 +6496,7 @@ LoopVectorizationCostModel::getInstructionCost(Instruction *I,
       // Return cost for branches around scalarized and predicated blocks.
       auto *Vec_i1Ty =
           VectorType::get(IntegerType::getInt1Ty(RetTy->getContext()), VF);
+      LLVM_DEBUG(dbgs() << "@@ScalarPredicatedBB, so cost = TTI.getScalarizationOverhead + TTI.getCFInstrCost * VF.getFixedValue, where:\n");
       return (
           TTI.getScalarizationOverhead(
               Vec_i1Ty, APInt::getAllOnes(VF.getFixedValue()),
