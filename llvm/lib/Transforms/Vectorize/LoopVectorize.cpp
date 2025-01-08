@@ -1456,8 +1456,9 @@ public:
 
   /// Returns the TailFoldingStyle that is best for the current loop.
   TailFoldingStyle getTailFoldingStyle(bool IVUpdateMayOverflow = true) const {
-    if (!ChosenTailFoldingStyle)
+    if (!ChosenTailFoldingStyle){
       return TailFoldingStyle::None;
+    }
     return IVUpdateMayOverflow ? ChosenTailFoldingStyle->first
                                : ChosenTailFoldingStyle->second;
   }
@@ -4339,14 +4340,14 @@ bool LoopVectorizationPlanner::isMoreProfitable(
   // vectorization.
 
   // Original code -> If false, then we prefer fixed-width vectorization over scalable vectorization
-  bool PreferScalable = !TTI.preferFixedOverScalableIfEqualCost() && A.Width.isScalable() && !B.Width.isScalable();
+  // bool PreferScalable = !TTI.preferFixedOverScalableIfEqualCost() && A.Width.isScalable() && !B.Width.isScalable();
   
-  // bool PreferScalable = true;
-  // if (A.Width.isScalable() && !B.Width.isScalable())
-  // {
-  //   PreferScalable = !TTI.preferFixedOverScalableIfEqualCost();
-  //   // PreferScalable = false;
-  // }
+  bool PreferScalable = true;
+  if (A.Width.isScalable() && !B.Width.isScalable())
+  {
+    PreferScalable = !TTI.preferFixedOverScalableIfEqualCost();
+    // PreferScalable = false;
+  }
   
   auto CmpFn = [PreferScalable](const InstructionCost &LHS,
                                 const InstructionCost &RHS) {
@@ -4908,7 +4909,7 @@ LoopVectorizationCostModel::selectInterleaveCount(ElementCount VF,
   // 1. If the code has reductions, then we interleave to break the cross
   // iteration dependency.
   // 2. If the loop is really small, then we interleave to reduce the loop
-  // overhead.
+  // overhead.  
   // 3. We don't interleave if we think that we will spill registers to memory
   // due to the increased register pressure.
 
@@ -4958,9 +4959,14 @@ LoopVectorizationCostModel::selectInterleaveCount(ElementCount VF,
   // We also want power of two interleave counts to ensure that the induction
   // variable of the vector loop wraps to zero, when tail is folded by masking;
   // this currently happens when OptForSize, in which case IC is set to 1 above.
+  // IC = (AvailableRegisters - LoopInvariantRegs) / RequiredRegisters
   unsigned IC = UINT_MAX;
-
+  
+  // MaxLocalUsers hold maximun number of concurrent live intervals in the loop.
+  // Live Interval refers to the range of a variable from its definition to its last use.
   for (auto& pair : R.MaxLocalUsers) {
+    // pair.first is the type of the register.
+    // pair.second is the number of registers that are used by the loop.
     unsigned TargetNumRegisters = TTI.getNumberOfRegisters(pair.first);
     LLVM_DEBUG(dbgs() << "LV: The target has " << TargetNumRegisters
                       << " registers of "
@@ -4976,7 +4982,11 @@ LoopVectorizationCostModel::selectInterleaveCount(ElementCount VF,
     unsigned LoopInvariantRegs = 0;
     if (R.LoopInvariantRegs.find(pair.first) != R.LoopInvariantRegs.end())
       LoopInvariantRegs = R.LoopInvariantRegs[pair.first];
-
+    // 其中：
+    // TargetNumRegisters: 目標架構上可用的寄存器總數
+    // LoopInvariantRegs: 被循環不變量佔用的寄存器數
+    // MaxLocalUsers: 循環中同時需要的最大寄存器數
+    // bit_floor: 向下取整到最近的 2 的冪次
     unsigned TmpIC = llvm::bit_floor((TargetNumRegisters - LoopInvariantRegs) /
                                      MaxLocalUsers);
     // Don't count the induction variable as interleaved.
@@ -4992,10 +5002,12 @@ LoopVectorizationCostModel::selectInterleaveCount(ElementCount VF,
   unsigned MaxInterleaveCount = TTI.getMaxInterleaveFactor(VF);
 
   // Check if the user has overridden the max.
-  if (VF.isScalar()) {
-    if (ForceTargetMaxScalarInterleaveFactor.getNumOccurrences() > 0)
+  if (VF.isScalar()) { 
+    // Check if the user has overridden the max.
+    if (ForceTargetMaxScalarInterleaveFactor.getNumOccurrences() > 0) 
       MaxInterleaveCount = ForceTargetMaxScalarInterleaveFactor;
   } else {
+    // Check if the user has overridden the max.
     if (ForceTargetMaxVectorInterleaveFactor.getNumOccurrences() > 0)
       MaxInterleaveCount = ForceTargetMaxVectorInterleaveFactor;
   }
@@ -5572,7 +5584,7 @@ InstructionCost LoopVectorizationCostModel::expectedCost(
     // For each instruction in the old loop.
     for (Instruction &I : BB->instructionsWithoutDebug()) {
       // Skip ignored values.
-      LLVM_DEBUG(dbgs() << "\n@@ Instruction: "<< I << '\n');
+      // LLVM_DEBUG(dbgs() << "\n@@ Instruction: "<< I << '\n');
       if (ValuesToIgnore.count(&I) ||
           (VF.isVector() && VecValuesToIgnore.count(&I)))
         continue;
@@ -5580,7 +5592,7 @@ InstructionCost LoopVectorizationCostModel::expectedCost(
      
 
       InstructionCost C = getInstructionCost(&I, VF);
-      LLVM_DEBUG(dbgs() << "\n@@ getInstructionCost: "<< C << '\n');
+      // LLVM_DEBUG(dbgs() << "\n@@ getInstructionCost: "<< C << '\n');
       // Check if we should override the cost.
       if (C.isValid() && ForceTargetInstructionCost.getNumOccurrences() > 0)
         C = InstructionCost(ForceTargetInstructionCost);
@@ -6471,7 +6483,7 @@ LoopVectorizationCostModel::getInstructionCost(Instruction *I,
     // vectorized code depends on whether the corresponding memory instruction
     // is scalarized or not. Therefore, we handle GEPs with the memory
     // instruction cost.
-    LLVM_DEBUG(dbgs() << "\n@@ It's GEP" << '\n');
+    // LLVM_DEBUG(dbgs() << "\n@@ It's GEP" << '\n');
     return 0;
   case Instruction::Br: {
     // In cases of scalarized and predicated instructions, there will be VF
@@ -6480,7 +6492,7 @@ LoopVectorizationCostModel::getInstructionCost(Instruction *I,
     // Note that the conditional branch from the loop latch will be replaced by
     // a single branch controlling the loop, so there is no extra overhead from
     // scalarization.
-    LLVM_DEBUG(dbgs() << "\n@@ It's Br" << '\n');
+    // LLVM_DEBUG(dbgs() << "\n@@ It's Br" << '\n');
     bool ScalarPredicatedBB = false;
     BranchInst *BI = cast<BranchInst>(I);
     if (VF.isVector() && BI->isConditional() &&
@@ -6496,7 +6508,7 @@ LoopVectorizationCostModel::getInstructionCost(Instruction *I,
       // Return cost for branches around scalarized and predicated blocks.
       auto *Vec_i1Ty =
           VectorType::get(IntegerType::getInt1Ty(RetTy->getContext()), VF);
-      LLVM_DEBUG(dbgs() << "@@ScalarPredicatedBB, so cost = TTI.getScalarizationOverhead + TTI.getCFInstrCost * VF.getFixedValue, where:\n");
+      // LLVM_DEBUG(dbgs() << "@@ScalarPredicatedBB, so cost = TTI.getScalarizationOverhead + TTI.getCFInstrCost * VF.getFixedValue, where:\n");
       return (
           TTI.getScalarizationOverhead(
               Vec_i1Ty, APInt::getAllOnes(VF.getFixedValue()),
