@@ -22070,6 +22070,12 @@ Value *CodeGenFunction::EmitRISCVBuiltinExpr(unsigned BuiltinID,
     return Store;
   }
 
+  // Tutorial: Connect Factorial intrinsic with clang builtin
+  case RISCV::BI__builtin_riscv_factorial:
+    ID = Intrinsic::riscv_factorial;
+    break;
+   
+
   // Vector builtins are handled from here.
 #include "clang/Basic/riscv_vector_builtin_cg.inc"
   // SiFive Vector builtins are handled from here.

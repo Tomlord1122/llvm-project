@@ -2087,3 +2087,6 @@ include "RISCVInstrInfoXwch.td"
 //===----------------------------------------------------------------------===//
 
 include "RISCVInstrGISel.td"
+
+// Tutorial
+include "RISCVInstrInfoFactorial.td"
