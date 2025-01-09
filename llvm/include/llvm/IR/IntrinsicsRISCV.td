@@ -1899,19 +1899,6 @@ let TargetPrefix = "riscv" in {
   def int_riscv_vsm3me   : RISCVBinaryAAXUnMasked;
 } // TargetPrefix = "riscv"
 
-// Tutorial
-let TargetPrefix = "riscv" in {
-  // Define a class for the factorial intrinsic 
-  // First it inherits from Intrinsic
-  // Then it has the attributes [IntrNoMem, IntrWillReturn, IntrSpeculatable]
-  class RiscvFactorial
-      : Intrinsic<[llvm_i32_ty], [llvm_i32_ty],
-              [IntrNoMem, IntrWillReturn, IntrSpeculatable]>;
-  // Instantiate the factorial intrinsic
-  // We use the name int_riscv_factorial to match the name in the clang builtins
-  def int_riscv_factorial : RiscvFactorial;
-}
-
 // Vendor extensions
 //===----------------------------------------------------------------------===//
 include "llvm/IR/IntrinsicsRISCVXTHead.td"
