@@ -163,6 +163,7 @@ using namespace llvm;
 #ifndef NDEBUG
 const char VerboseDebug[] = DEBUG_TYPE "-verbose";
 #endif
+std::string output_stream;
 
 /// @{
 /// Metadata attribute names
@@ -4340,14 +4341,14 @@ bool LoopVectorizationPlanner::isMoreProfitable(
   // vectorization.
 
   // Original code -> If false, then we prefer fixed-width vectorization over scalable vectorization
-  // bool PreferScalable = !TTI.preferFixedOverScalableIfEqualCost() && A.Width.isScalable() && !B.Width.isScalable();
+  bool PreferScalable = !TTI.preferFixedOverScalableIfEqualCost() && A.Width.isScalable() && !B.Width.isScalable();
   
-  bool PreferScalable = true;
-  if (A.Width.isScalable() && !B.Width.isScalable())
-  {
-    PreferScalable = !TTI.preferFixedOverScalableIfEqualCost();
-    // PreferScalable = false;
-  }
+  // bool PreferScalable = true;
+  // if (A.Width.isScalable() && !B.Width.isScalable())
+  // {
+  //   PreferScalable = !TTI.preferFixedOverScalableIfEqualCost();
+  //   // PreferScalable = false;
+  // }
   
   auto CmpFn = [PreferScalable](const InstructionCost &LHS,
                                 const InstructionCost &RHS) {
@@ -10305,6 +10306,10 @@ LoopVectorizeResult LoopVectorizePass::runImpl(
 
 PreservedAnalyses LoopVectorizePass::run(Function &F,
                                          FunctionAnalysisManager &AM) {
+    // output_stream += std::string("abc");
+    // llvm::outs() << output_stream;
+    // output_stream = "";
+    // llvm::outs() << output_stream << "asdfghjk\n";
     auto &LI = AM.getResult<LoopAnalysis>(F);
     // There are no loops in the function. Return before computing other expensive
     // analyses.
