@@ -5742,7 +5742,7 @@ LoopVectorizationCostModel::getConsecutiveMemOpCost(Instruction *I,
   } else {
     TTI::OperandValueInfo OpInfo = TTI::getOperandInfo(I->getOperand(0));
     InstructionCost MemoryOpCost = TTI.getMemoryOpCost(I->getOpcode(), VectorTy, Alignment, AS, CostKind, OpInfo, I);
-    ttilog += "MemoryOpCost (" + STR(MemoryOpCost) + ")";
+    ttilog += "MemoryOpCost(" + STR(MemoryOpCost) + ")";
     Cost += MemoryOpCost;
   }
 
@@ -5752,7 +5752,7 @@ LoopVectorizationCostModel::getConsecutiveMemOpCost(Instruction *I,
                                std::nullopt, CostKind, 0);
     Cost += ShuffleCost;
   }
-  llvm::outs() <<"@@ Instruction: " << *I << "\n\tCost: " << Cost << "\n\tVectorType: " << *VectorTy << "\n\tttilog: " << ttilog << '\n\n';
+  llvm::outs() <<"@@ Instruction: " << *I << "\n\tCost: " << Cost << "\n\tVectorType: " << *VectorTy << "\n\tttilog -> " << ttilog << "\n\n";
   return Cost;
 }
 

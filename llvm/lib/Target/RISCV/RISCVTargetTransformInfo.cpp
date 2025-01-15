@@ -611,7 +611,7 @@ InstructionCost RISCVTTIImpl::getShuffleCost(TTI::ShuffleKind Kind,
     // Mask operation additionally required extend and truncate
     InstructionCost ExtendCost = Tp->getElementType()->isIntegerTy(1) ? 3 : 0;
     InstructionCost ShuffleCost = LT.first * (LenCost + GatherCost + ExtendCost);
-    ttilog += ", ShuffleCost(" + STR(ShuffleCost) + ") = LT.first("+STR(LT.first) + ") * (" + STR(LenCost) + " + " + STR(GatherCost) + " + " + STR(ExtendCost) + ")";
+    ttilog += "-> ShuffleCost(" + STR(ShuffleCost) + ") = LT.first("+STR(LT.first) + ") * (" + STR(LenCost) + " + " + STR(GatherCost) + " + " + STR(ExtendCost) + ")";
     ttilog += "\tMask = [";
     for (size_t i = 0; i < Mask.size();i++){
       ttilog += STRI(Mask[i]) + ", ";

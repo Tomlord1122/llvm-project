@@ -25,9 +25,13 @@
 #include "llvm/Transforms/Vectorize/LoopVectorizationLegality.h"
 #include <algorithm>
 #include <optional>
+#include "llvm/ADT/SmallString.h"
+#include <string>
 using namespace llvm;
 using namespace llvm::PatternMatch;
-
+extern SmallString<256> ttilog;
+#define STR(a) std::to_string(a.getValue().value())
+#define STRI(a) std::to_string(a)
 #define DEBUG_TYPE "aarch64tti"
 
 static cl::opt<bool> EnableFalkorHWPFUnrollFix("enable-falkor-hwpf-unroll-fix",
@@ -4286,8 +4290,13 @@ InstructionCost AArch64TTIImpl::getShuffleCost(
         {TTI::SK_Reverse, MVT::nxv4i1, 1},
         {TTI::SK_Reverse, MVT::nxv2i1, 1},
     };
-    if (const auto *Entry = CostTableLookup(ShuffleTbl, Kind, LT.second))
-      return LT.first * Entry->Cost;
+    if (const auto *Entry = CostTableLookup(ShuffleTbl, Kind, LT.second)){
+      llvm::outs() << "MVT: " << LT.second << "\n";
+      InstructionCost Cost = LT.first * Entry->Cost;
+      InstructionCost EntryCost = Entry->Cost;
+      ttilog += "-> ShuffleCost(" + STR(Cost) + ") = LT.first("+STR(LT.first) + ") * (" + STR(EntryCost) + ")";
+      return Cost;
+    }
   }
 
   if (Kind == TTI::SK_Splice && isa<ScalableVectorType>(Tp))
