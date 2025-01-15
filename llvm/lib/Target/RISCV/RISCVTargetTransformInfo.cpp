@@ -17,9 +17,14 @@
 #include "llvm/IR/PatternMatch.h"
 #include <cmath>
 #include <optional>
+#include "llvm/ADT/SmallString.h"
+#include <string>
+
 using namespace llvm;
 using namespace llvm::PatternMatch;
-
+extern SmallString<256> ttilog;
+#define STR(a) std::to_string(a.getValue().value())
+#define STRI(a) std::to_string(a)
 #define DEBUG_TYPE "riscvtti"
 
 static cl::opt<unsigned> RVVRegisterWidthLMUL(
@@ -592,6 +597,7 @@ InstructionCost RISCVTTIImpl::getShuffleCost(TTI::ShuffleKind Kind,
     //   vid.v v9
     //   vrsub.vx v10, v9, a0
     //   vrgather.vv v9, v8, v10
+    ttilog += " = LT.first * (LenCost + GatherCost + ExtendCost) = (";
     InstructionCost LenCost = 3;
     if (LT.second.isFixedLengthVector())
       // vrsub.vi has a 5 bit immediate field, otherwise an li suffices
@@ -604,6 +610,13 @@ InstructionCost RISCVTTIImpl::getShuffleCost(TTI::ShuffleKind Kind,
         getRISCVInstructionCost(Opcodes, LT.second, CostKind);
     // Mask operation additionally required extend and truncate
     InstructionCost ExtendCost = Tp->getElementType()->isIntegerTy(1) ? 3 : 0;
+    ttilog += STR(LT.first) + " * (";
+    ttilog += STR(LenCost) + " + " + STR(GatherCost) + " + " + STR(ExtendCost) + ")";
+    ttilog += "Mask = [";
+    for (size_t i = 0; i < Mask.size();i++){
+      ttilog += STRI(Mask[i]) + ", ";
+    }
+    ttilog += "]";
     return LT.first * (LenCost + GatherCost + ExtendCost);
   }
   }

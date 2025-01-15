@@ -151,9 +151,11 @@
 #include <limits>
 #include <map>
 #include <memory>
-#include <string>
 #include <tuple>
 #include <utility>
+#include "llvm/ADT/SmallString.h"
+#include <string>
+
 
 using namespace llvm;
 
@@ -164,6 +166,10 @@ using namespace llvm;
 const char VerboseDebug[] = DEBUG_TYPE "-verbose";
 #endif
 std::string output_stream;
+SmallString<256> ttilog;
+#define STR(a) std::to_string(a.getValue().value())
+#define STRI(a) std::to_string(a)
+
 
 /// @{
 /// Metadata attribute names
@@ -5718,30 +5724,36 @@ LoopVectorizationCostModel::getMemInstScalarizationCost(Instruction *I,
 InstructionCost
 LoopVectorizationCostModel::getConsecutiveMemOpCost(Instruction *I,
                                                     ElementCount VF) {
+  ttilog += "";
   Type *ValTy = getLoadStoreType(I);
   auto *VectorTy = cast<VectorType>(ToVectorTy(ValTy, VF));
   Value *Ptr = getLoadStorePointerOperand(I);
   unsigned AS = getLoadStoreAddressSpace(I);
   int ConsecutiveStride = Legal->isConsecutivePtr(ValTy, Ptr);
   enum TTI::TargetCostKind CostKind = TTI::TCK_RecipThroughput;
-
   assert((ConsecutiveStride == 1 || ConsecutiveStride == -1) &&
          "Stride should be 1 or -1 for consecutive memory access");
   const Align Alignment = getLoadStoreAlignment(I);
   InstructionCost Cost = 0;
   if (Legal->isMaskRequired(I)) {
+    ttilog += " MaskedMemoryOpCost = " + STR(TTI.getMaskedMemoryOpCost(I->getOpcode(), VectorTy, Alignment, AS, CostKind)) + ",";
     Cost += TTI.getMaskedMemoryOpCost(I->getOpcode(), VectorTy, Alignment, AS,
                                       CostKind);
   } else {
     TTI::OperandValueInfo OpInfo = TTI::getOperandInfo(I->getOperand(0));
+    ttilog += " MemoryOpCost = " + STR(TTI.getMemoryOpCost(I->getOpcode(), VectorTy, Alignment, AS, CostKind, OpInfo, I)) + ",";
     Cost += TTI.getMemoryOpCost(I->getOpcode(), VectorTy, Alignment, AS,
                                 CostKind, OpInfo, I);
   }
 
   bool Reverse = ConsecutiveStride < 0;
-  if (Reverse)
+  if (Reverse){
+    ttilog += " ShuffleCost = " + STR(TTI.getShuffleCost(TargetTransformInfo::SK_Reverse, VectorTy,
+                               std::nullopt, CostKind, 0)) + "";
     Cost += TTI.getShuffleCost(TargetTransformInfo::SK_Reverse, VectorTy,
                                std::nullopt, CostKind, 0);
+  }
+  llvm::outs() <<"@@ Instruction: " << I << " Cost: " << Cost << "VectorType: " << VectorTy << " ttilog: " << ttilog << '\n';
   return Cost;
 }
 
