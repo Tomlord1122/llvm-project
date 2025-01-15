@@ -5724,7 +5724,7 @@ LoopVectorizationCostModel::getMemInstScalarizationCost(Instruction *I,
 InstructionCost
 LoopVectorizationCostModel::getConsecutiveMemOpCost(Instruction *I,
                                                     ElementCount VF) {
-  ttilog += "";
+  ttilog = "";
   Type *ValTy = getLoadStoreType(I);
   auto *VectorTy = cast<VectorType>(ToVectorTy(ValTy, VF));
   Value *Ptr = getLoadStorePointerOperand(I);
@@ -5736,24 +5736,23 @@ LoopVectorizationCostModel::getConsecutiveMemOpCost(Instruction *I,
   const Align Alignment = getLoadStoreAlignment(I);
   InstructionCost Cost = 0;
   if (Legal->isMaskRequired(I)) {
-    ttilog += " MaskedMemoryOpCost = " + STR(TTI.getMaskedMemoryOpCost(I->getOpcode(), VectorTy, Alignment, AS, CostKind)) + ",";
-    Cost += TTI.getMaskedMemoryOpCost(I->getOpcode(), VectorTy, Alignment, AS,
-                                      CostKind);
+    InstructionCost MaskedMemoryOpCost = TTI.getMaskedMemoryOpCost(I->getOpcode(), VectorTy, Alignment, AS, CostKind);
+    ttilog += "MaskedMemoryOpCost(" + STR(MaskedMemoryOpCost) + ")";
+    Cost += MaskedMemoryOpCost;
   } else {
     TTI::OperandValueInfo OpInfo = TTI::getOperandInfo(I->getOperand(0));
-    ttilog += " MemoryOpCost = " + STR(TTI.getMemoryOpCost(I->getOpcode(), VectorTy, Alignment, AS, CostKind, OpInfo, I)) + ",";
-    Cost += TTI.getMemoryOpCost(I->getOpcode(), VectorTy, Alignment, AS,
-                                CostKind, OpInfo, I);
+    InstructionCost MemoryOpCost = TTI.getMemoryOpCost(I->getOpcode(), VectorTy, Alignment, AS, CostKind, OpInfo, I);
+    ttilog += "MemoryOpCost (" + STR(MemoryOpCost) + ")";
+    Cost += MemoryOpCost;
   }
 
   bool Reverse = ConsecutiveStride < 0;
   if (Reverse){
-    ttilog += " ShuffleCost = " + STR(TTI.getShuffleCost(TargetTransformInfo::SK_Reverse, VectorTy,
-                               std::nullopt, CostKind, 0)) + "";
-    Cost += TTI.getShuffleCost(TargetTransformInfo::SK_Reverse, VectorTy,
+    InstructionCost ShuffleCost = TTI.getShuffleCost(TargetTransformInfo::SK_Reverse, VectorTy,
                                std::nullopt, CostKind, 0);
+    Cost += ShuffleCost;
   }
-  llvm::outs() <<"@@ Instruction: " << I << " Cost: " << Cost << "VectorType: " << VectorTy << " ttilog: " << ttilog << '\n';
+  llvm::outs() <<"@@ Instruction: " << *I << "\n\tCost: " << Cost << "\n\tVectorType: " << *VectorTy << "\n\tttilog: " << ttilog << '\n\n';
   return Cost;
 }
 
