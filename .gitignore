@@ -74,4 +74,5 @@ pythonenv*
 /arm64-debug/
 /prefer-fixed/
 /prefer-fixed-arm/
+/riscv-rev
 /llvm-test-suite/
