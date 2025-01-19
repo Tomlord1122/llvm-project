@@ -1584,7 +1584,8 @@ void VPWidenGEPRecipe::print(raw_ostream &O, const Twine &Indent,
 #endif
 
 void VPVectorPointerRecipe ::execute(VPTransformState &State) {
-  auto &Builder = State.Builder;
+  // State.Builder is used to generate LLVM IR instructions.
+  auto &Builder = State.Builder; 
   State.setDebugLocFrom(getDebugLoc());
   for (unsigned Part = 0; Part < State.UF; ++Part) {
     // Calculate the pointer for the specific unroll-part.
