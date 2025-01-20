@@ -151,9 +151,11 @@
 #include <limits>
 #include <map>
 #include <memory>
-#include <string>
 #include <tuple>
 #include <utility>
+#include "llvm/ADT/SmallString.h"
+#include <string>
+
 
 using namespace llvm;
 
@@ -164,6 +166,10 @@ using namespace llvm;
 const char VerboseDebug[] = DEBUG_TYPE "-verbose";
 #endif
 std::string output_stream;
+SmallString<256> ttilog;
+#define STR(a) std::to_string(a.getValue().value())
+#define STRI(a) std::to_string(a)
+
 
 /// @{
 /// Metadata attribute names
@@ -5577,7 +5583,7 @@ InstructionCost LoopVectorizationCostModel::expectedCost(
     llvm::outs() << "\n-----------------Function that is being costed:'"
                     << TheLoop->getHeader()->getParent()->getName() << "' from "
                     << TheLoop->getLocStr() << "-----------------\n";
-    LLVM_DEBUG(dbgs() << "\n@@-----------------Function that is being costed:'"
+    LLVM_DEBUG(dbgs() << "\n-----------------Function that is being costed:'"
                     << TheLoop->getHeader()->getParent()->getName() << "' from "
                     << TheLoop->getLocStr() << "-----------------\n");
     
@@ -5585,7 +5591,6 @@ InstructionCost LoopVectorizationCostModel::expectedCost(
     // For each instruction in the old loop.
     for (Instruction &I : BB->instructionsWithoutDebug()) {
       // Skip ignored values.
-      // LLVM_DEBUG(dbgs() << "\n@@ Instruction: "<< I << '\n');
       if (ValuesToIgnore.count(&I) ||
           (VF.isVector() && VecValuesToIgnore.count(&I)))
         continue;
@@ -5593,7 +5598,6 @@ InstructionCost LoopVectorizationCostModel::expectedCost(
      
 
       InstructionCost C = getInstructionCost(&I, VF);
-      // LLVM_DEBUG(dbgs() << "\n@@ getInstructionCost: "<< C << '\n');
       // Check if we should override the cost.
       if (C.isValid() && ForceTargetInstructionCost.getNumOccurrences() > 0)
         C = InstructionCost(ForceTargetInstructionCost);
@@ -5718,32 +5722,71 @@ LoopVectorizationCostModel::getMemInstScalarizationCost(Instruction *I,
 InstructionCost
 LoopVectorizationCostModel::getConsecutiveMemOpCost(Instruction *I,
                                                     ElementCount VF) {
+  ttilog = "";
   Type *ValTy = getLoadStoreType(I);
   auto *VectorTy = cast<VectorType>(ToVectorTy(ValTy, VF));
   Value *Ptr = getLoadStorePointerOperand(I);
   unsigned AS = getLoadStoreAddressSpace(I);
   int ConsecutiveStride = Legal->isConsecutivePtr(ValTy, Ptr);
   enum TTI::TargetCostKind CostKind = TTI::TCK_RecipThroughput;
-
   assert((ConsecutiveStride == 1 || ConsecutiveStride == -1) &&
          "Stride should be 1 or -1 for consecutive memory access");
   const Align Alignment = getLoadStoreAlignment(I);
   InstructionCost Cost = 0;
   if (Legal->isMaskRequired(I)) {
-    Cost += TTI.getMaskedMemoryOpCost(I->getOpcode(), VectorTy, Alignment, AS,
-                                      CostKind);
+    InstructionCost MaskedMemoryOpCost = TTI.getMaskedMemoryOpCost(I->getOpcode(), VectorTy, Alignment, AS, CostKind);
+    if (MaskedMemoryOpCost.isValid()) {
+      ttilog += "MaskedMemoryOpCost(" + STR(MaskedMemoryOpCost) + ")";
+    }
+    Cost += MaskedMemoryOpCost;
   } else {
     TTI::OperandValueInfo OpInfo = TTI::getOperandInfo(I->getOperand(0));
-    Cost += TTI.getMemoryOpCost(I->getOpcode(), VectorTy, Alignment, AS,
-                                CostKind, OpInfo, I);
+    InstructionCost MemoryOpCost = TTI.getMemoryOpCost(I->getOpcode(), VectorTy, Alignment, AS, CostKind, OpInfo, I);
+    if (MemoryOpCost.isValid()) {
+      ttilog += "MemoryOpCost(" + STR(MemoryOpCost) + ")";
+    }
+    Cost += MemoryOpCost;
   }
 
   bool Reverse = ConsecutiveStride < 0;
-  if (Reverse)
-    Cost += TTI.getShuffleCost(TargetTransformInfo::SK_Reverse, VectorTy,
+  if (Reverse){
+    InstructionCost ShuffleCost = TTI.getShuffleCost(TargetTransformInfo::SK_Reverse, VectorTy,
                                std::nullopt, CostKind, 0);
+    Cost += ShuffleCost;
+  }
+  llvm::outs() <<"@@ Instruction =>" << *I << " -> Cost: " << Cost << " -> VectorType: " << *VectorTy << " -> ttilog -> " << ttilog << "\n";
   return Cost;
 }
+
+// InstructionCost
+// LoopVectorizationCostModel::getConsecutiveMemOpCost(Instruction *I,
+//                                                     ElementCount VF) {
+//   Type *ValTy = getLoadStoreType(I);
+//   auto *VectorTy = cast<VectorType>(ToVectorTy(ValTy, VF));
+//   Value *Ptr = getLoadStorePointerOperand(I);
+//   unsigned AS = getLoadStoreAddressSpace(I);
+//   int ConsecutiveStride = Legal->isConsecutivePtr(ValTy, Ptr);
+//   enum TTI::TargetCostKind CostKind = TTI::TCK_RecipThroughput;
+
+//   assert((ConsecutiveStride == 1 || ConsecutiveStride == -1) &&
+//          "Stride should be 1 or -1 for consecutive memory access");
+//   const Align Alignment = getLoadStoreAlignment(I);
+//   InstructionCost Cost = 0;
+//   if (Legal->isMaskRequired(I)) {
+//     Cost += TTI.getMaskedMemoryOpCost(I->getOpcode(), VectorTy, Alignment, AS,
+//                                       CostKind);
+//   } else {
+//     TTI::OperandValueInfo OpInfo = TTI::getOperandInfo(I->getOperand(0));
+//     Cost += TTI.getMemoryOpCost(I->getOpcode(), VectorTy, Alignment, AS,
+//                                 CostKind, OpInfo, I);
+//   }
+
+//   bool Reverse = ConsecutiveStride < 0;
+//   if (Reverse)
+//     Cost += TTI.getShuffleCost(TargetTransformInfo::SK_Reverse, VectorTy,
+//                                std::nullopt, CostKind, 0);
+//   return Cost;
+// }
 
 InstructionCost
 LoopVectorizationCostModel::getUniformMemOpCost(Instruction *I,
@@ -6484,7 +6527,6 @@ LoopVectorizationCostModel::getInstructionCost(Instruction *I,
     // vectorized code depends on whether the corresponding memory instruction
     // is scalarized or not. Therefore, we handle GEPs with the memory
     // instruction cost.
-    // LLVM_DEBUG(dbgs() << "\n@@ It's GEP" << '\n');
     return 0;
   case Instruction::Br: {
     // In cases of scalarized and predicated instructions, there will be VF
@@ -6493,7 +6535,6 @@ LoopVectorizationCostModel::getInstructionCost(Instruction *I,
     // Note that the conditional branch from the loop latch will be replaced by
     // a single branch controlling the loop, so there is no extra overhead from
     // scalarization.
-    // LLVM_DEBUG(dbgs() << "\n@@ It's Br" << '\n');
     bool ScalarPredicatedBB = false;
     BranchInst *BI = cast<BranchInst>(I);
     if (VF.isVector() && BI->isConditional() &&
@@ -6509,7 +6550,6 @@ LoopVectorizationCostModel::getInstructionCost(Instruction *I,
       // Return cost for branches around scalarized and predicated blocks.
       auto *Vec_i1Ty =
           VectorType::get(IntegerType::getInt1Ty(RetTy->getContext()), VF);
-      // LLVM_DEBUG(dbgs() << "@@ScalarPredicatedBB, so cost = TTI.getScalarizationOverhead + TTI.getCFInstrCost * VF.getFixedValue, where:\n");
       return (
           TTI.getScalarizationOverhead(
               Vec_i1Ty, APInt::getAllOnes(VF.getFixedValue()),

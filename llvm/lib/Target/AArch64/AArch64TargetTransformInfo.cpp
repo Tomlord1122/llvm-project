@@ -25,9 +25,13 @@
 #include "llvm/Transforms/Vectorize/LoopVectorizationLegality.h"
 #include <algorithm>
 #include <optional>
+#include <string>
+#include "llvm/ADT/SmallString.h"
 using namespace llvm;
 using namespace llvm::PatternMatch;
-
+extern SmallString<256> ttilog;
+#define STR(a) std::to_string(a.getValue().value())
+#define STRI(a) std::to_string(a)
 #define DEBUG_TYPE "aarch64tti"
 
 static cl::opt<bool> EnableFalkorHWPFUnrollFix("enable-falkor-hwpf-unroll-fix",
@@ -4286,8 +4290,42 @@ InstructionCost AArch64TTIImpl::getShuffleCost(
         {TTI::SK_Reverse, MVT::nxv4i1, 1},
         {TTI::SK_Reverse, MVT::nxv2i1, 1},
     };
-    if (const auto *Entry = CostTableLookup(ShuffleTbl, Kind, LT.second))
+    if (const auto *Entry = CostTableLookup(ShuffleTbl, Kind, LT.second)){
+      if (Kind == TTI::SK_Reverse){
+      llvm::outs() << "MVT: " << LT.second << "\n";
+      InstructionCost Cost = LT.first * Entry->Cost;
+      InstructionCost EntryCost = Entry->Cost;
+      if (Cost.isValid()) {
+        ttilog += "-> ShuffleCost(" + STR(Cost) + ") = LT.first("+STR(LT.first) + ") * (" + STR(EntryCost) + ") -> ASM: [";
+        switch (LT.second.SimpleTy) {
+          case MVT::v2i32:
+          case MVT::v2f32:
+          case MVT::v4f16:
+          case MVT::v4i16:
+          case MVT::v8i8:
+            ttilog += "REV64";
+            break;
+          case MVT::v4i32:
+          case MVT::v4f32:
+          case MVT::v8f16:
+          case MVT::v8i16:
+          case MVT::v16i8:
+            ttilog += "REV64, EXT";
+            break;
+          case MVT::v2i64:
+          case MVT::v2f64:
+            ttilog += "EXT";
+            break;
+          default:
+            ttilog += "Unknown";
+        }
+        ttilog += "]";
+      }
+        return Cost;
+
+      }
       return LT.first * Entry->Cost;
+    }
   }
 
   if (Kind == TTI::SK_Splice && isa<ScalableVectorType>(Tp))
