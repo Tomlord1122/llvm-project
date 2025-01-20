@@ -1,0 +1,285 @@
+diff --git a/target/riscv/helper.h b/target/riscv/helper.h
+index 37b54e0991..2af54103f7 100644
+--- a/target/riscv/helper.h
++++ b/target/riscv/helper.h
+@@ -213,6 +213,30 @@ DEF_HELPER_4(vs2r_v, void, ptr, tl, env, i32)
+ DEF_HELPER_4(vs4r_v, void, ptr, tl, env, i32)
+ DEF_HELPER_4(vs8r_v, void, ptr, tl, env, i32)
+ 
++/*
++* load and store register with offset instructions
++*/
++DEF_HELPER_4(vl1re8i_v, void, ptr, tl, env, i32)
++DEF_HELPER_4(vl1re16i_v, void, ptr, tl, env, i32)
++DEF_HELPER_4(vl1re32i_v, void, ptr, tl, env, i32)
++DEF_HELPER_4(vl1re64i_v, void, ptr, tl, env, i32)
++DEF_HELPER_4(vl2re8i_v, void, ptr, tl, env, i32)
++DEF_HELPER_4(vl2re16i_v, void, ptr, tl, env, i32)
++DEF_HELPER_4(vl2re32i_v, void, ptr, tl, env, i32)
++DEF_HELPER_4(vl2re64i_v, void, ptr, tl, env, i32)
++DEF_HELPER_4(vl4re8i_v, void, ptr, tl, env, i32)
++DEF_HELPER_4(vl4re16i_v, void, ptr, tl, env, i32)
++DEF_HELPER_4(vl4re32i_v, void, ptr, tl, env, i32)
++DEF_HELPER_4(vl4re64i_v, void, ptr, tl, env, i32)
++DEF_HELPER_4(vl8re8i_v, void, ptr, tl, env, i32)
++DEF_HELPER_4(vl8re16i_v, void, ptr, tl, env, i32)
++DEF_HELPER_4(vl8re32i_v, void, ptr, tl, env, i32)
++DEF_HELPER_4(vl8re64i_v, void, ptr, tl, env, i32)
++DEF_HELPER_4(vs1ri_v, void, ptr, tl, env, i32)
++DEF_HELPER_4(vs2ri_v, void, ptr, tl, env, i32)
++DEF_HELPER_4(vs4ri_v, void, ptr, tl, env, i32)
++DEF_HELPER_4(vs8ri_v, void, ptr, tl, env, i32)
++
+ DEF_HELPER_6(vadd_vv_b, void, ptr, ptr, ptr, ptr, env, i32)
+ DEF_HELPER_6(vadd_vv_h, void, ptr, ptr, ptr, ptr, env, i32)
+ DEF_HELPER_6(vadd_vv_w, void, ptr, ptr, ptr, ptr, env, i32)
+diff --git a/target/riscv/insn32.decode b/target/riscv/insn32.decode
+index 73d5d1b045..f18440d32d 100644
+--- a/target/riscv/insn32.decode
++++ b/target/riscv/insn32.decode
+@@ -30,6 +30,7 @@
+ %nf     29:3                     !function=ex_plus_1
+ 
+ # immediates:
++%imm_s9    20:s8 5:1
+ %imm_i    20:s12
+ %imm_s    25:s7 7:5
+ %imm_b    31:s1 7:1 25:6 8:4     !function=ex_shift_1
+@@ -57,6 +58,7 @@
+ &k_aes     shamt rs2 rs1 rd
+ 
+ # Formats 32:
++@vl_vs   ... . ........ ..... ... ..... . . ..... &i      imm=%imm_s9     %rs1 %rd
+ @r       .......   ..... ..... ... ..... ....... &r                %rs2 %rs1 %rd
+ @i       ............    ..... ... ..... ....... &i      imm=%imm_i     %rs1 %rd
+ @b       .......   ..... ..... ... ..... ....... &b      imm=%imm_b %rs2 %rs1
+@@ -409,6 +411,29 @@ vs2r_v        001 000 1 01000 ..... 000 ..... 0100111 @r2
+ vs4r_v        011 000 1 01000 ..... 000 ..... 0100111 @r2
+ vs8r_v        111 000 1 01000 ..... 000 ..... 0100111 @r2
+ 
++# MTK Vector load/store with offset insn.
++vl1re8i_v     000 1 ........ ..... 000 ..... 0 . 01011 @vl_vs
++vl1re16i_v    000 1 ........ ..... 101 ..... 0 . 01011 @vl_vs
++vl1re32i_v    000 1 ........ ..... 110 ..... 0 . 01011 @vl_vs
++vl1re64i_v    000 1 ........ ..... 111 ..... 0 . 01011 @vl_vs
++vl2re8i_v     001 1 ........ ..... 000 ..... 0 . 01011 @vl_vs
++vl2re16i_v    001 1 ........ ..... 101 ..... 0 . 01011 @vl_vs
++vl2re32i_v    001 1 ........ ..... 110 ..... 0 . 01011 @vl_vs
++vl2re64i_v    001 1 ........ ..... 111 ..... 0 . 01011 @vl_vs
++vl4re8i_v     011 1 ........ ..... 000 ..... 0 . 01011 @vl_vs
++vl4re16i_v    011 1 ........ ..... 101 ..... 0 . 01011 @vl_vs
++vl4re32i_v    011 1 ........ ..... 110 ..... 0 . 01011 @vl_vs
++vl4re64i_v    011 1 ........ ..... 111 ..... 0 . 01011 @vl_vs
++vl8re8i_v     111 1 ........ ..... 000 ..... 0 . 01011 @vl_vs
++vl8re16i_v    111 1 ........ ..... 101 ..... 0 . 01011 @vl_vs
++vl8re32i_v    111 1 ........ ..... 110 ..... 0 . 01011 @vl_vs
++vl8re64i_v    111 1 ........ ..... 111 ..... 0 . 01011 @vl_vs
++
++vs1ri_v       000 0 ........ ..... 000 ..... 0 . 01011 @vl_vs
++vs2ri_v       001 0 ........ ..... 000 ..... 0 . 01011 @vl_vs
++vs4ri_v       011 0 ........ ..... 000 ..... 0 . 01011 @vl_vs
++vs8ri_v       111 0 ........ ..... 000 ..... 0 . 01011 @vl_vs
++
+ # *** new major opcode OP-V ***
+ vadd_vv         000000 . ..... ..... 000 ..... 1010111 @r_vm
+ vadd_vx         000000 . ..... ..... 100 ..... 1010111 @r_vm
+diff --git a/target/riscv/insn_trans/trans_rvv.c.inc b/target/riscv/insn_trans/trans_rvv.c.inc
+index f2e3d38515..7f491851b7 100644
+--- a/target/riscv/insn_trans/trans_rvv.c.inc
++++ b/target/riscv/insn_trans/trans_rvv.c.inc
+@@ -17,6 +17,7 @@
+ #include "tcg/tcg-op-gvec.h"
+ #include "tcg/tcg-gvec-desc.h"
+ #include "internals.h"
++#include "stdio.h"
+ 
+ static inline bool is_overlapped(const int8_t astart, int8_t asize,
+                                  const int8_t bstart, int8_t bsize)
+@@ -1157,6 +1158,101 @@ GEN_LDST_WHOLE_TRANS(vs2r_v, 2, 1, true)
+ GEN_LDST_WHOLE_TRANS(vs4r_v, 4, 1, true)
+ GEN_LDST_WHOLE_TRANS(vs8r_v, 8, 1, true)
+ 
++
++/*
++ * load and store register with offset instructions
++ */
++typedef void gen_helper_ldst_with_offset(TCGv_ptr, TCGv, TCGv_env, TCGv_i32);
++
++static bool ldst_with_offset_trans(uint32_t vd, uint32_t rs1, uint32_t nf,
++                             uint32_t width, gen_helper_ldst_with_offset *fn,
++                             DisasContext *s, bool is_store, int offset)
++{
++    uint32_t evl = (s->cfg_ptr->vlen / 8) * nf / width;
++    TCGLabel *over = gen_new_label();
++    tcg_gen_brcondi_tl(TCG_COND_GEU, cpu_vstart, evl, over);
++
++    TCGv_ptr dest;
++    TCGv base;
++    TCGv_i32 desc;
++    // TCGv src1;
++    // TCGv oset;
++
++    uint32_t data = FIELD_DP32(0, VDATA, NF, nf);
++    dest = tcg_temp_new_ptr();
++    desc = tcg_constant_i32(simd_desc(s->cfg_ptr->vlen / 8,
++                                      s->cfg_ptr->vlen / 8, data));
++
++    
++    ////// here comes the modified codes //////
++    
++    // printf("original offset = 0x%lx\n", offset);
++    
++    // oset = tcg_constant_i64(offset);
++    // printf("transformed offset = %p\n", oset);
++
++    // src1 = get_gpr(s, rs1, EXT_NONE);
++    // printf("src1 = %p\n", src1);
++
++    // base = tcg_temp_new();
++    // tcg_gen_addi_tl(base, src1, offset);
++    // printf("destination address = %p\n", base);
++
++    base = get_address(s, rs1, offset);
++    tcg_gen_addi_ptr(dest, cpu_env, vreg_ofs(s, vd));
++
++    fn(dest, base, cpu_env, desc);
++
++    if (!is_store) {
++        mark_vs_dirty(s);
++    }
++    gen_set_label(over);
++
++    return true;
++}
++
++
++/*
++ * load and store whole register instructions ignore vtype and vl setting.
++ * Thus, we don't need to check vill bit. (Section 7.9)
++ */
++#define GEN_LDST_WITH_OFFSET_TRANS(NAME, ARG_NF, WIDTH, IS_STORE)               \
++static bool trans_##NAME(DisasContext *s, arg_##NAME * a)                 \
++{                                                                     \
++    if (require_rvv(s) &&                                                 \
++        QEMU_IS_ALIGNED(a->rd, ARG_NF)) {                                 \
++        return ldst_with_offset_trans(a->rd, a->rs1, ARG_NF, WIDTH,             \
++                                gen_helper_##NAME, s, IS_STORE, a -> imm);          \
++    }                                                                     \
++    return false;                                                         \
++}
++
++
++
++GEN_LDST_WITH_OFFSET_TRANS(vl1re8i_v,  1, 1, false)
++GEN_LDST_WITH_OFFSET_TRANS(vl1re16i_v, 1, 2, false)
++GEN_LDST_WITH_OFFSET_TRANS(vl1re32i_v, 1, 4, false)
++GEN_LDST_WITH_OFFSET_TRANS(vl1re64i_v, 1, 8, false)
++GEN_LDST_WITH_OFFSET_TRANS(vl2re8i_v,  2, 1, false)
++GEN_LDST_WITH_OFFSET_TRANS(vl2re16i_v, 2, 2, false)
++GEN_LDST_WITH_OFFSET_TRANS(vl2re32i_v, 2, 4, false)
++GEN_LDST_WITH_OFFSET_TRANS(vl2re64i_v, 2, 8, false)
++GEN_LDST_WITH_OFFSET_TRANS(vl4re8i_v,  4, 1, false)
++GEN_LDST_WITH_OFFSET_TRANS(vl4re16i_v, 4, 2, false)
++GEN_LDST_WITH_OFFSET_TRANS(vl4re32i_v, 4, 4, false)
++GEN_LDST_WITH_OFFSET_TRANS(vl4re64i_v, 4, 8, false)
++GEN_LDST_WITH_OFFSET_TRANS(vl8re8i_v,  8, 1, false)
++GEN_LDST_WITH_OFFSET_TRANS(vl8re16i_v, 8, 2, false)
++GEN_LDST_WITH_OFFSET_TRANS(vl8re32i_v, 8, 4, false)
++GEN_LDST_WITH_OFFSET_TRANS(vl8re64i_v, 8, 8, false)
++
++GEN_LDST_WITH_OFFSET_TRANS(vs1ri_v, 1, 1, true)
++GEN_LDST_WITH_OFFSET_TRANS(vs2ri_v, 2, 1, true)
++GEN_LDST_WITH_OFFSET_TRANS(vs4ri_v, 4, 1, true)
++GEN_LDST_WITH_OFFSET_TRANS(vs8ri_v, 8, 1, true)
++
++
++
+ /*
+  *** Vector Integer Arithmetic Instructions
+  */
+diff --git a/target/riscv/vector_helper.c b/target/riscv/vector_helper.c
+index 2423affe37..4a50573d3f 100644
+--- a/target/riscv/vector_helper.c
++++ b/target/riscv/vector_helper.c
+@@ -735,6 +735,81 @@ GEN_VEXT_ST_WHOLE(vs2r_v, int8_t, ste_b)
+ GEN_VEXT_ST_WHOLE(vs4r_v, int8_t, ste_b)
+ GEN_VEXT_ST_WHOLE(vs8r_v, int8_t, ste_b)
+ 
++/*
++* load and store register with offset instructions
++*/
++static void
++vext_ldst_with_offset(void *vd, target_ulong base, CPURISCVState *env,
++                                 uint32_t desc, vext_ldst_elem_fn *ldst_elem,
++                                 uint32_t log2_esz, uintptr_t ra)
++{
++    uint32_t i, k, off, pos;
++    uint32_t nf = vext_nf(desc);
++    uint32_t vlenb = riscv_cpu_cfg(env)->vlen >> 3;
++    uint32_t max_elems = vlenb >> log2_esz;
++
++    k = env->vstart / max_elems;
++    off = env->vstart % max_elems;
++
++    if (off) {
++        /* load/store rest of elements of current segment pointed by vstart */
++        for (pos = off; pos < max_elems; pos++, env->vstart++) {
++            target_ulong addr = base + ((pos + k * max_elems) << log2_esz);
++            ldst_elem(env, adjust_addr(env, addr), pos + k * max_elems, vd, ra);
++        }
++        k++;
++    }
++
++    /* load/store elements for rest of segments */
++    for (; k < nf; k++) {
++        for (i = 0; i < max_elems; i++, env->vstart++) {
++            target_ulong addr = base + ((i + k * max_elems) << log2_esz);
++            ldst_elem(env, adjust_addr(env, addr), i + k * max_elems, vd, ra);
++        }
++    }
++
++    env->vstart = 0;
++}
++
++#define GEN_VEXT_LD_WITH_OFFSET(NAME, ETYPE, LOAD_FN)      \
++void HELPER(NAME)(void *vd, target_ulong base,       \
++                  CPURISCVState *env, uint32_t desc) \
++{                                                    \
++    vext_ldst_with_offset(vd, base, env, desc, LOAD_FN,    \
++                    ctzl(sizeof(ETYPE)), GETPC());   \
++}
++
++GEN_VEXT_LD_WITH_OFFSET(vl1re8i_v,  int8_t,  lde_b)
++GEN_VEXT_LD_WITH_OFFSET(vl1re16i_v, int16_t, lde_h)
++GEN_VEXT_LD_WITH_OFFSET(vl1re32i_v, int32_t, lde_w)
++GEN_VEXT_LD_WITH_OFFSET(vl1re64i_v, int64_t, lde_d)
++GEN_VEXT_LD_WITH_OFFSET(vl2re8i_v,  int8_t,  lde_b)
++GEN_VEXT_LD_WITH_OFFSET(vl2re16i_v, int16_t, lde_h)
++GEN_VEXT_LD_WITH_OFFSET(vl2re32i_v, int32_t, lde_w)
++GEN_VEXT_LD_WITH_OFFSET(vl2re64i_v, int64_t, lde_d)
++GEN_VEXT_LD_WITH_OFFSET(vl4re8i_v,  int8_t,  lde_b)
++GEN_VEXT_LD_WITH_OFFSET(vl4re16i_v, int16_t, lde_h)
++GEN_VEXT_LD_WITH_OFFSET(vl4re32i_v, int32_t, lde_w)
++GEN_VEXT_LD_WITH_OFFSET(vl4re64i_v, int64_t, lde_d)
++GEN_VEXT_LD_WITH_OFFSET(vl8re8i_v,  int8_t,  lde_b)
++GEN_VEXT_LD_WITH_OFFSET(vl8re16i_v, int16_t, lde_h)
++GEN_VEXT_LD_WITH_OFFSET(vl8re32i_v, int32_t, lde_w)
++GEN_VEXT_LD_WITH_OFFSET(vl8re64i_v, int64_t, lde_d)
++
++
++#define GEN_VEXT_ST_WITH_OFFSET(NAME, ETYPE, STORE_FN)     \
++void HELPER(NAME)(void *vd, target_ulong base,       \
++                  CPURISCVState *env, uint32_t desc) \
++{                                                    \
++    vext_ldst_with_offset(vd, base, env, desc, STORE_FN,   \
++                    ctzl(sizeof(ETYPE)), GETPC());   \
++}
++
++GEN_VEXT_ST_WITH_OFFSET(vs1ri_v, int8_t, ste_b)
++GEN_VEXT_ST_WITH_OFFSET(vs2ri_v, int8_t, ste_b)
++GEN_VEXT_ST_WITH_OFFSET(vs4ri_v, int8_t, ste_b)
++GEN_VEXT_ST_WITH_OFFSET(vs8ri_v, int8_t, ste_b)
++
+ /*
+  *** Vector Integer Arithmetic Instructions
+  */
