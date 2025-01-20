@@ -1,0 +1,607 @@
+commit c20818500a1dbdfbf89f7317ed66666c708706b6
+Author: Harry_ABCLAB <x90613@gmail.com>
+Date:   Thu Jan 16 22:03:49 2025 +0800
+
+    0116
+
+diff --git a/llvm/lib/CodeGen/MachineInstr.cpp b/llvm/lib/CodeGen/MachineInstr.cpp
+index be64e9c8452f..241b011f7ae4 100644
+--- a/llvm/lib/CodeGen/MachineInstr.cpp
++++ b/llvm/lib/CodeGen/MachineInstr.cpp
+@@ -1430,7 +1430,7 @@ bool MachineInstr::mayAlias(AAResults *AA, const MachineInstr &Other,
+   // Let the target decide if memory accesses cannot possibly overlap.
+   if (TII->areMemAccessesTriviallyDisjoint(*this, Other))
+     return false;
+-
++    
+   // Memory operations without memory operands may access anything. Be
+   // conservative and assume `MayAlias`.
+   if (memoperands_empty() || Other.memoperands_empty())
+diff --git a/llvm/lib/Target/RISCV/AsmParser/RISCVAsmParser.cpp b/llvm/lib/Target/RISCV/AsmParser/RISCVAsmParser.cpp
+index a288e7d884d3..e6e0faec2beb 100644
+--- a/llvm/lib/Target/RISCV/AsmParser/RISCVAsmParser.cpp
++++ b/llvm/lib/Target/RISCV/AsmParser/RISCVAsmParser.cpp
+@@ -757,6 +757,16 @@ public:
+            VK == RISCVMCExpr::VK_RISCV_None;
+   }
+ 
++  bool isSImm9() const {
++    if (!isImm())
++      return false;
++    RISCVMCExpr::VariantKind VK = RISCVMCExpr::VK_RISCV_None;
++    int64_t Imm;
++    bool IsConstantImm = evaluateConstantImm(getImm(), Imm, VK);
++    return IsConstantImm && isInt<9>(fixImmediateForRV32(Imm, isRV64Imm())) &&
++           VK == RISCVMCExpr::VK_RISCV_None;
++  }
++  
+   bool isSImm5() const {
+     if (!isImm())
+       return false;
+diff --git a/llvm/lib/Target/RISCV/MCTargetDesc/RISCVBaseInfo.h b/llvm/lib/Target/RISCV/MCTargetDesc/RISCVBaseInfo.h
+index 626206962e75..d5b370a90609 100644
+--- a/llvm/lib/Target/RISCV/MCTargetDesc/RISCVBaseInfo.h
++++ b/llvm/lib/Target/RISCV/MCTargetDesc/RISCVBaseInfo.h
+@@ -287,6 +287,7 @@ enum OperandType : unsigned {
+   OPERAND_SIMM5,
+   OPERAND_SIMM5_PLUS1,
+   OPERAND_SIMM6,
++  OPERAND_SIMM9,
+   OPERAND_SIMM6_NONZERO,
+   OPERAND_SIMM10_LSB0000_NONZERO,
+   OPERAND_SIMM12,
+diff --git a/llvm/lib/Target/RISCV/RISCVISelDAGToDAG.cpp b/llvm/lib/Target/RISCV/RISCVISelDAGToDAG.cpp
+index db949f3476e2..e5a3fe0a7f00 100644
+--- a/llvm/lib/Target/RISCV/RISCVISelDAGToDAG.cpp
++++ b/llvm/lib/Target/RISCV/RISCVISelDAGToDAG.cpp
+@@ -2664,6 +2664,53 @@ bool RISCVDAGToDAGISel::SelectAddrRegImm(SDValue Addr, SDValue &Base,
+   return true;
+ }
+ 
++
++bool RISCVDAGToDAGISel::SelectAddrRegImm_V(SDValue Addr, SDValue &Base,
++                                         SDValue &Offset, bool IsINX) {
++  
++  if (!CurDAG->isBaseWithConstantOffset(Addr))
++    return false;
++
++  SDLoc DL(Addr);
++  MVT VT = Addr.getSimpleValueType();
++
++  int64_t RV32ZdinxRange = IsINX ? 4 : 0;
++  if (CurDAG->isBaseWithConstantOffset(Addr)) {
++    int64_t CVal = cast<ConstantSDNode>(Addr.getOperand(1))->getSExtValue();
++    if (isInt<9>(CVal) && isInt<9>(CVal + RV32ZdinxRange)) {
++      Base = Addr.getOperand(0);
++      if (Base.getOpcode() == RISCVISD::ADD_LO) {
++        SDValue LoOperand = Base.getOperand(1);
++        if (auto *GA = dyn_cast<GlobalAddressSDNode>(LoOperand)) {
++          // If the Lo in (ADD_LO hi, lo) is a global variable's address
++          // (its low part, really), then we can rely on the alignment of that
++          // variable to provide a margin of safety before low part can overflow
++          // the 12 bits of the load/store offset. Check if CVal falls within
++          // that margin; if so (low part + CVal) can't overflow.
++          const DataLayout &DL = CurDAG->getDataLayout();
++          Align Alignment = commonAlignment(
++              GA->getGlobal()->getPointerAlignment(DL), GA->getOffset());
++          if (CVal == 0 || Alignment > CVal) {
++            int64_t CombinedOffset = CVal + GA->getOffset();
++            Base = Base.getOperand(0);
++            Offset = CurDAG->getTargetGlobalAddress(
++                GA->getGlobal(), SDLoc(LoOperand), LoOperand.getValueType(),
++                CombinedOffset, GA->getTargetFlags());
++            return true;
++          }
++        }
++      }
++
++      if (auto *FIN = dyn_cast<FrameIndexSDNode>(Base)){
++        return false;
++      }
++      Offset = CurDAG->getTargetConstant(CVal, DL, VT);
++      return true;
++    }
++  }
++  return false;
++}
++
+ /// Similar to SelectAddrRegImm, except that the least significant 5 bits of
+ /// Offset shoule be all zeros.
+ bool RISCVDAGToDAGISel::SelectAddrRegImmLsb00000(SDValue Addr, SDValue &Base,
+diff --git a/llvm/lib/Target/RISCV/RISCVISelDAGToDAG.h b/llvm/lib/Target/RISCV/RISCVISelDAGToDAG.h
+index 1b3b00eeccce..dc9e8195b481 100644
+--- a/llvm/lib/Target/RISCV/RISCVISelDAGToDAG.h
++++ b/llvm/lib/Target/RISCV/RISCVISelDAGToDAG.h
+@@ -49,6 +49,7 @@ public:
+   bool SelectFrameAddrRegImm(SDValue Addr, SDValue &Base, SDValue &Offset);
+   bool SelectAddrRegImm(SDValue Addr, SDValue &Base, SDValue &Offset,
+                         bool IsINX = false);
++  bool SelectAddrRegImm_V(SDValue Addr, SDValue &Base, SDValue &Offset, bool IsINX = false);
+   bool SelectAddrRegImmINX(SDValue Addr, SDValue &Base, SDValue &Offset) {
+     return SelectAddrRegImm(Addr, Base, Offset, true);
+   }
+diff --git a/llvm/lib/Target/RISCV/RISCVISelLowering.cpp b/llvm/lib/Target/RISCV/RISCVISelLowering.cpp
+index 823fb428472e..7963af365fc6 100644
+--- a/llvm/lib/Target/RISCV/RISCVISelLowering.cpp
++++ b/llvm/lib/Target/RISCV/RISCVISelLowering.cpp
+@@ -1841,9 +1841,13 @@ bool RISCVTargetLowering::isLegalAddressingMode(const DataLayout &DL,
+   if (AM.BaseGV)
+     return false;
+ 
+-  // RVV instructions only support register addressing.
+-  if (Subtarget.hasVInstructions() && isa<VectorType>(Ty))
++  // Custom RVV supports 9-bit signed offset vector load/store
++  if (Subtarget.hasVInstructions() && isa<VectorType>(Ty)){
++    if(AM.HasBaseReg && AM.Scale == 0 && isInt<9>(AM.BaseOffs))
++      return true;
++    
+     return AM.HasBaseReg && AM.Scale == 0 && !AM.BaseOffs;
++  }
+ 
+   // Require a 12-bit signed offset.
+   if (!isInt<12>(AM.BaseOffs))
+diff --git a/llvm/lib/Target/RISCV/RISCVInstrFormatsV.td b/llvm/lib/Target/RISCV/RISCVInstrFormatsV.td
+index 6f27c98dd618..4b80cb6027fe 100644
+--- a/llvm/lib/Target/RISCV/RISCVInstrFormatsV.td
++++ b/llvm/lib/Target/RISCV/RISCVInstrFormatsV.td
+@@ -224,6 +224,30 @@ class RVInstVLU<bits<3> nf, bit mew, RISCVLSUMOP lumop,
+   let RVVConstraint = VMConstraint;
+ }
+ 
++// class RVInstVLU_custom<bits<3> nf, bit mew,
++//                 bits<3> width, dag outs, dag ins, string opcodestr,
++//                 string argstr>
++//     : RVInst<outs, ins, opcodestr, argstr, [], InstFormatI> {
++//   bits<12> imm12;
++//   bits<5> rs1;
++//   bits<5> vd;
++//   bit vm;
++
++//   let Inst{31-29} = nf;
++//   let Inst{28} = mew;
++//   let Inst{27-26} = MOPLDUnitStride.Value;
++//   let Inst{25-23} = imm12{11-9};
++//   let Inst{22} = vm;
++//   let Inst{21-20} = imm12{8-7};
++//   let Inst{19-15} = rs1;
++//   let Inst{14-12} = width;
++//   let Inst{11-7} = vd;
++//   let Inst{6-0} = imm12{6-0};
++
++//   let Uses = [VTYPE, VL];
++//   let RVVConstraint = VMConstraint;
++// }
++
+ class RVInstVLS<bits<3> nf, bit mew, bits<3> width,
+                 dag outs, dag ins, string opcodestr, string argstr>
+     : RVInst<outs, ins, opcodestr, argstr, [], InstFormatR> {
+@@ -289,6 +313,29 @@ class RVInstVSU<bits<3> nf, bit mew, RISCVLSUMOP sumop,
+   let Uses = [VTYPE, VL];
+ }
+ 
++// class RVInstVSU_custom<bits<3> nf, bit mew,
++//                 bits<3> width, dag outs, dag ins, string opcodestr,
++//                 string argstr>
++//     : RVInst<outs, ins, opcodestr, argstr, [], InstFormatI> {
++//   bits<12> imm12;
++//   bits<5> rs1;
++//   bits<5> vs3;
++//   bit vm;
++
++//   let Inst{31-29} = nf;
++//   let Inst{28} = mew;
++//   let Inst{27-26} = MOPSTUnitStride.Value;
++//   let Inst{25-23} = imm12{11-9};
++//   let Inst{22} = vm;
++//   let Inst{21-20} = imm12{8-7};
++//   let Inst{19-15} = rs1;
++//   let Inst{14-12} = width;
++//   let Inst{11-7} = vs3;
++//   let Inst{6-0} = imm12{6-0};
++
++//   let Uses = [VTYPE, VL];
++// }
++
+ class RVInstVSS<bits<3> nf, bit mew, bits<3> width,
+                 dag outs, dag ins, string opcodestr, string argstr>
+     : RVInst<outs, ins, opcodestr, argstr, [], InstFormatR> {
+diff --git a/llvm/lib/Target/RISCV/RISCVInstrInfo.cpp b/llvm/lib/Target/RISCV/RISCVInstrInfo.cpp
+index ba3b4bd701d6..7944a07adde6 100644
+--- a/llvm/lib/Target/RISCV/RISCVInstrInfo.cpp
++++ b/llvm/lib/Target/RISCV/RISCVInstrInfo.cpp
+@@ -2426,6 +2426,9 @@ bool RISCVInstrInfo::verifyInstruction(const MachineInstr &MI,
+         case RISCVOp::OPERAND_SIMM6_NONZERO:
+           Ok = Imm != 0 && isInt<6>(Imm);
+           break;
++        case RISCVOp::OPERAND_SIMM9:
++          Ok = isInt<9>(Imm);
++          break;
+         case RISCVOp::OPERAND_VTYPEI10:
+           Ok = isUInt<10>(Imm);
+           break;
+@@ -2754,14 +2757,23 @@ bool RISCVInstrInfo::areMemAccessesTriviallyDisjoint(
+   const MachineOperand *BaseOpA = nullptr, *BaseOpB = nullptr;
+   int64_t OffsetA = 0, OffsetB = 0;
+   LocationSize WidthA = 0, WidthB = 0;
++  return false;
+   if (getMemOperandWithOffsetWidth(MIa, BaseOpA, OffsetA, WidthA, TRI) &&
+       getMemOperandWithOffsetWidth(MIb, BaseOpB, OffsetB, WidthB, TRI)) {
+     if (BaseOpA->isIdenticalTo(*BaseOpB)) {
+       int LowOffset = std::min(OffsetA, OffsetB);
+       int HighOffset = std::max(OffsetA, OffsetB);
+       LocationSize LowWidth = (LowOffset == OffsetA) ? WidthA : WidthB;
++      // print some debug info.
++      llvm::outs() << "!!!!!!!!!!BaseOpA is identical to BaseOpB!!!!!!!!!!" << "\n";
++      llvm::outs() << "Low offset is: " << LowOffset << "\n";
++      llvm::outs() << "High offset is: " << HighOffset << "\n";
++      llvm::outs() << "Low width is: " << LowWidth << "\n";
++      llvm::outs() << "LowWidth.getvalue() is: " << LowWidth.getValue() << "\n";
++      llvm::outs() << "LowWidth.getValue().getKnownMinValue()is: " << LowWidth.getValue().getKnownMinValue() << "\n";
++
+       if (LowWidth.hasValue() &&
+-          LowOffset + (int)LowWidth.getValue() <= HighOffset)
++          LowOffset + (int)LowWidth.getValue().getKnownMinValue() <= HighOffset)
+         return true;
+     }
+   }
+diff --git a/llvm/lib/Target/RISCV/RISCVInstrInfo.td b/llvm/lib/Target/RISCV/RISCVInstrInfo.td
+index 04054d2c3fee..b76ccddbe325 100644
+--- a/llvm/lib/Target/RISCV/RISCVInstrInfo.td
++++ b/llvm/lib/Target/RISCV/RISCVInstrInfo.td
+@@ -160,6 +160,12 @@ class RISCVUImmOp<int bitsNum> : RISCVOp {
+ class RISCVUImmLeafOp<int bitsNum> :
+   RISCVUImmOp<bitsNum>, ImmLeaf<XLenVT, "return isUInt<" # bitsNum # ">(Imm);">;
+ 
++/////////////////////// this part should be aware /////////////////////////
++///  ParserMatchClass: In the same directory and /jason/llvm-project/riscv-custom/include/llvm/Target/Target.td
++///  EncoderMethod: getImmOpValue() function resides in /jason/llvm-project/llvm/lib/Target/RISCV/MCTargetDesc/RISCVMCCodeEmitter.cpp
++///  DecoderMethod: decodeSImmOperand() function resides in /jason/llvm-project/llvm/lib/Target/RISCV/Disassembler/RISCVDisassembler.cpp
++///  Operand type: /jason/llvm-project/llvm/lib/Target/RISCV/MCTargetDesc/RISCVBaseInfo.h
++
+ class RISCVSImmOp<int bitsNum> : RISCVOp {
+   let ParserMatchClass = SImmAsmOperand<bitsNum>;
+   let EncoderMethod = "getImmOpValue";
+@@ -167,9 +173,11 @@ class RISCVSImmOp<int bitsNum> : RISCVOp {
+   let OperandType = "OPERAND_SIMM" # bitsNum;
+ }
+ 
++/// ImmLeaf: /jason/llvm-project/riscv-custom/include/llvm/Target/TargetSelectionDAG.td
++
+ class RISCVSImmLeafOp<int bitsNum> :
+   RISCVSImmOp<bitsNum>, ImmLeaf<XLenVT, "return isInt<" # bitsNum # ">(Imm);">;
+-
++///////////////////////////////////////////////////////////////////////////////////
+ def FenceArg : AsmOperandClass {
+   let Name = "FenceArg";
+   let RenderMethod = "addFenceArgOperands";
+@@ -244,6 +252,8 @@ def simm12 : RISCVSImmLeafOp<12> {
+   }];
+ }
+ 
++def simm9 : RISCVSImmLeafOp<9>;
++
+ // A 12-bit signed immediate which cannot fit in 6-bit signed immediate,
+ // but even negative value fit in 12-bit.
+ def simm12_no6 : ImmLeaf<XLenVT, [{
+@@ -399,6 +409,7 @@ def uimm6gt32 : ImmLeaf<XLenVT, [{
+ // Necessary because a frameindex can't be matched directly in a pattern.
+ def FrameAddrRegImm : ComplexPattern<iPTR, 2, "SelectFrameAddrRegImm",
+                                      [frameindex, or, add]>;
++def AddrRegImm_V : ComplexPattern<iPTR, 2, "SelectAddrRegImm_V">;
+ def AddrRegImm : ComplexPattern<iPTR, 2, "SelectAddrRegImm">;
+ 
+ // Return the negation of an immediate value.
+@@ -2059,6 +2070,7 @@ include "RISCVInstrInfoZk.td"
+ // Vector
+ include "RISCVInstrInfoV.td"
+ include "RISCVInstrInfoZvk.td"
++include "RISCVInstrInfoMTK_V.td"
+ 
+ // Compressed
+ include "RISCVInstrInfoC.td"
+diff --git a/llvm/lib/Target/RISCV/RISCVInstrInfoMTK_V.td b/llvm/lib/Target/RISCV/RISCVInstrInfoMTK_V.td
+new file mode 100644
+index 000000000000..1b218450ebd8
+--- /dev/null
++++ b/llvm/lib/Target/RISCV/RISCVInstrInfoMTK_V.td
+@@ -0,0 +1,149 @@
++////////////////defined in /llvm-project/llvm/lib/Target/RISCV/RISCVInstrInfo.td
++// //define 9-bit signed-immediate
++// def simm9 : RISCVSImmLeafOp<9>;
++//===----------------------------------------------------------------------===//
++// Instruction class templates
++//===----------------------------------------------------------------------===//
++class RVInstVLU_custom<bits<3> nf, bit mew,
++                bits<3> width, dag outs, dag ins, string opcodestr,
++                string argstr>
++    : RVInst<outs, ins, opcodestr, argstr, [], InstFormatI> {
++  bits<9> simm9;
++  bits<5> rs1;
++  bits<5> vd;
++  bit vm;
++
++  let Inst{31-29} = nf;
++  let Inst{28} = mew;
++  let Inst{27-20} = simm9{8-1};
++  let Inst{19-15} = rs1;
++  let Inst{14-12} = width;
++  let Inst{11-7} = vd;
++  let Inst{6} = 0b0;
++  let Inst{5} = simm9{0}; //stole from the bit that is used to distinguish custom-0 and custom-1 
++  let Inst{4-0} = 0b01011;
++
++  let Uses = [VTYPE, VL];
++  let RVVConstraint = VMConstraint;
++}
++
++class RVInstVSU_custom<bits<3> nf, bit mew,
++                bits<3> width, dag outs, dag ins, string opcodestr,
++                string argstr>
++    : RVInst<outs, ins, opcodestr, argstr, [], InstFormatI> {
++  bits<9> simm9;
++  bits<5> rs1;
++  bits<5> vs3;
++  bit vm;
++
++  let Inst{31-29} = nf;
++  let Inst{28} = mew;
++  let Inst{27-20} = simm9{8-1};
++  let Inst{19-15} = rs1;
++  let Inst{14-12} = width;
++  let Inst{11-7} = vs3;
++  let Inst{6} = 0b0;
++  let Inst{5} = simm9{0}; 
++  let Inst{4-0} = 0b01011;
++
++  let Uses = [VTYPE, VL];
++}
++
++//===----------------------------------------------------------------------===//
++// Instruction class templates
++//===----------------------------------------------------------------------===//
++let hasSideEffects = 0, mayLoad = 1, mayStore = 0 in {
++let RVVConstraint = NoConstraint in {
++
++//Custom unit-stride whole register load vl<nf>ri.v vd, simm_9(rs1)
++class VWholeLoad_I<bits<3> nf, RISCVWidth width, string opcodestr, RegisterClass VRC>
++    : RVInstVLU_custom<nf, 1,
++                width.Value{2-0}, (outs VRC:$vd), (ins GPRMem:$rs1, simm9:$simm9),
++                opcodestr, "$vd, ${simm9}(${rs1})"> {
++  let Uses = [];
++}
++
++} // vm = 1, RVVConstraint = NoConstraint
++} // hasSideEffects = 0, mayLoad = 1, mayStore = 0
++
++let hasSideEffects = 0, mayLoad = 0, mayStore = 1 in {
++
++// vs<nf>r.v vs3, simm9(rs1)
++class VWholeStore_I<bits<3> nf, string opcodestr, RegisterClass VRC>
++    : RVInstVSU_custom<nf, 0,
++                0b000, (outs), (ins VRC:$vs3, GPRMem:$rs1, simm9:$simm9),
++                opcodestr, "$vs3, ${simm9}(${rs1})"> {
++  let Uses = [];
++}
++
++}// hasSideEffects = 0, mayLoad = 0, mayStore = 1
++
++//===----------------------------------------------------------------------===//
++// Instruction multiclass templates
++//===----------------------------------------------------------------------===//
++multiclass VWholeLoadN_I<int l, bits<3> nf, string opcodestr, RegisterClass VRC> {
++  defvar w = !cast<RISCVWidth>("LSWidth" # l);
++  defvar s = !cast<SchedWrite>("WriteVLD" # !add(nf, 1) # "R");
++
++  def E # l # _V : VWholeLoad_I<nf, w, opcodestr # "e" # l # "i.v", VRC>,
++                   Sched<[s, ReadVLDX]>;
++}
++
++
++foreach eew = [8, 16, 32, 64] in {
++  defvar w = !cast<RISCVWidth>("LSWidth" # eew);
++
++  let Predicates = !if(!eq(eew, 64), [HasVInstructionsI64],
++                                     [HasVInstructions]) in {
++    
++    //Vector Load Whole Register immediate Instructions
++    defm VL1R_I_ : VWholeLoadN_I<eew, 0, "vl1r", VR>;
++    defm VL2R_I_ : VWholeLoadN_I<eew, 1, "vl2r", VRM2>;
++    defm VL4R_I_ : VWholeLoadN_I<eew, 3, "vl4r", VRM4>;
++    defm VL8R_I_ : VWholeLoadN_I<eew, 7, "vl8r", VRM8>;
++  }
++}
++
++let Predicates = [HasVInstructions] in {
++
++//Vector store Whole Register with immediate as offset Instructions
++def VS1R_I_V : VWholeStore_I<0, "vs1ri.v", VR>,
++             Sched<[WriteVST1R, ReadVST1R, ReadVSTX]>;
++def VS2R_I_V : VWholeStore_I<1, "vs2ri.v", VRM2>,
++             Sched<[WriteVST2R, ReadVST2R, ReadVSTX]>;
++def VS4R_I_V : VWholeStore_I<3, "vs4ri.v", VRM4>,
++             Sched<[WriteVST4R, ReadVST4R, ReadVSTX]>;
++def VS8R_I_V : VWholeStore_I<7, "vs8ri.v", VRM8>,
++             Sched<[WriteVST8R, ReadVST8R, ReadVSTX]>;
++
++} // Predicates = [HasVInstructions]
++
++//===----------------------------------------------------------------------===//
++// Helpers to define the SDNode patterns.
++//===----------------------------------------------------------------------===//
++
++multiclass VPatUSLoadStoreWholeVRSDNode_I<ValueType type,
++                                        int log2sew,
++                                        LMULInfo vlmul,
++                                        VReg reg_class,
++                                        int sew = !shl(1, log2sew)> {
++  defvar load_instr =
++    !cast<Instruction>("VL"#!substr(vlmul.MX, 1)#"R_I_E"#sew#"_V");
++  defvar store_instr =
++    !cast<Instruction>("VS"#!substr(vlmul.MX, 1)#"R_I_V");
++
++  // Load
++  def : Pat<(type (load (AddrRegImm_V (XLenVT GPR:$rs1), simm9:$simm9))),
++            (load_instr GPR:$rs1, simm9:$simm9)>;
++  // Store
++  def : Pat<(store type:$rs2 , (AddrRegImm_V (XLenVT GPR:$rs1), simm9:$simm9)),
++            (store_instr reg_class:$rs2, GPR:$rs1, simm9:$simm9)>;
++}
++
++//Load/Store with immediate as offest
++foreach vti = [VI8M1, VI8M2, VI8M4, VI8M8, VI16M1, VI16M2, VI16M4, VI16M8, VI32M1, VI32M2, VI32M4, VI32M8, VI64M1, VI64M2, VI64M4, VI64M8] in 
++  defm : VPatUSLoadStoreWholeVRSDNode_I<vti.Vector, vti.Log2SEW, vti.LMul, vti.RegClass>;
++
++//===----------------------------------------------------------------------===//
++// Instruction Scheduling 
++//===----------------------------------------------------------------------===//
+diff --git a/llvm/lib/Target/RISCV/RISCVInstrInfoV.td b/llvm/lib/Target/RISCV/RISCVInstrInfoV.td
+index b5817237b7fd..3a2918022950 100644
+--- a/llvm/lib/Target/RISCV/RISCVInstrInfoV.td
++++ b/llvm/lib/Target/RISCV/RISCVInstrInfoV.td
+@@ -313,6 +313,14 @@ class VWholeLoad<bits<3> nf, RISCVWidth width, string opcodestr, RegisterClass V
+   let Uses = [];
+ }
+ 
++// //Custom unit-stride whole register load vl<nf>ri.v vd, imm_12(rs1)
++// class VWholeLoad_I<bits<3> nf, RISCVWidth width, string opcodestr, RegisterClass VRC>
++//     : RVInstVLU_custom<nf, 1,
++//                 width.Value{2-0}, (outs VRC:$vd), (ins GPRMem:$rs1, simm12:$imm12),
++//                 opcodestr, "$vd, ${imm12}(${rs1})"> {
++//   let Uses = [];
++// }
++
+ // unit-stride mask load vd, (rs1)
+ class VUnitStrideLoadMask<string opcodestr>
+     : RVInstVLU<0b000, LSWidth8.Value{3}, LUMOPUnitStrideMask, LSWidth8.Value{2-0},
+@@ -376,6 +384,15 @@ class VUnitStrideStore<RISCVWidth width, string opcodestr>
+                 "$vs3, ${rs1}$vm">;
+ 
+ let vm = 1 in {
++// // vs<nf>r.v vs3, imm12(rs1)
++// class VWholeStore_I<bits<3> nf, string opcodestr, RegisterClass VRC>
++//     : RVInstVSU_custom<nf, 0,
++//                 0b000, (outs), (ins VRC:$vs3, GPRMem:$rs1, simm12:$imm12),
++//                 opcodestr, "$vs3, ${imm12}(${rs1})"> {
++//   let Uses = [];
++// }
++
++  
+ // vs<nf>r.v vd, (rs1)
+ class VWholeStore<bits<3> nf, string opcodestr, RegisterClass VRC>
+     : RVInstVSU<nf, 0, SUMOPUnitStrideWholeReg,
+@@ -1019,6 +1036,14 @@ multiclass VWholeLoadN<int l, bits<3> nf, string opcodestr, RegisterClass VRC> {
+                    Sched<[s, ReadVLDX]>;
+ }
+ 
++// multiclass VWholeLoadN_I<int l, bits<3> nf, string opcodestr, RegisterClass VRC> {
++//   defvar w = !cast<RISCVWidth>("LSWidth" # l);
++//   defvar s = !cast<SchedWrite>("WriteVLD" # !add(nf, 1) # "R");
++
++//   def E # l # _V : VWholeLoad_I<nf, w, opcodestr # "e" # l # "i.v", VRC>,
++//                    Sched<[s, ReadVLDX]>;
++// }
++
+ //===----------------------------------------------------------------------===//
+ // Instructions
+ //===----------------------------------------------------------------------===//
+@@ -1053,7 +1078,7 @@ foreach eew = [8, 16, 32, 64] in {
+     // Vector Strided Instructions
+     def VLSE#eew#_V  : VStridedLoad<w,  "vlse"#eew#".v">, VLSSchedMC<eew>;
+     def VSSE#eew#_V  : VStridedStore<w,  "vsse"#eew#".v">, VSSSchedMC<eew>;
+-
++    //Vector Load Whole Register Instructions
+     defm VL1R : VWholeLoadN<eew, 0, "vl1r", VR>;
+     defm VL2R : VWholeLoadN<eew, 1, "vl2r", VRM2>;
+     defm VL4R : VWholeLoadN<eew, 3, "vl4r", VRM4>;
+@@ -1065,6 +1090,22 @@ foreach eew = [8, 16, 32, 64] in {
+   defm "" : VIndexLoadStore<eew>;
+ }
+ 
++
++// //when eew == 8, VL1R_I_E8_V and VS1R_I_V have the same encoding(decoding conflits occurs!), so temporarily remove eew = 8.
++// foreach eew = [8, 16, 32, 64] in {
++//   defvar w = !cast<RISCVWidth>("LSWidth" # eew);
++
++//   let Predicates = !if(!eq(eew, 64), [HasVInstructionsI64],
++//                                      [HasVInstructions]) in {
++    
++//     //Vector Load Whole Register immediate Instructions
++//     defm VL1R_I_ : VWholeLoadN_I<eew, 0, "vl1r", VR>;
++//     defm VL2R_I_ : VWholeLoadN_I<eew, 1, "vl2r", VRM2>;
++//     defm VL4R_I_ : VWholeLoadN_I<eew, 3, "vl4r", VRM4>;
++//     defm VL8R_I_ : VWholeLoadN_I<eew, 7, "vl8r", VRM8>;
++//   }
++// }
++
+ let Predicates = [HasVInstructions] in {
+ def VLM_V : VUnitStrideLoadMask<"vlm.v">,
+              Sched<[WriteVLDM_WorstCase, ReadVLDX]>;
+@@ -1074,7 +1115,17 @@ def : InstAlias<"vle1.v $vd, (${rs1})",
+                 (VLM_V VR:$vd, GPR:$rs1), 0>;
+ def : InstAlias<"vse1.v $vs3, (${rs1})",
+                 (VSM_V VR:$vs3, GPR:$rs1), 0>;
+-
++// //Vector store Whole Register with immediate as offset Instructions
++// def VS1R_I_V : VWholeStore_I<0, "vs1ri.v", VR>,
++//              Sched<[WriteVST1R, ReadVST1R, ReadVSTX]>;
++// def VS2R_I_V : VWholeStore_I<1, "vs2ri.v", VRM2>,
++//              Sched<[WriteVST2R, ReadVST2R, ReadVSTX]>;
++// def VS4R_I_V : VWholeStore_I<3, "vs4ri.v", VRM4>,
++//              Sched<[WriteVST4R, ReadVST4R, ReadVSTX]>;
++// def VS8R_I_V : VWholeStore_I<7, "vs8ri.v", VRM8>,
++//              Sched<[WriteVST8R, ReadVST8R, ReadVSTX]>;
++
++//Vector Store Whole Register Instructions
+ def VS1R_V : VWholeStore<0, "vs1r.v", VR>,
+              Sched<[WriteVST1R, ReadVST1R, ReadVSTX]>;
+ def VS2R_V : VWholeStore<1, "vs2r.v", VRM2>,
+diff --git a/llvm/lib/Target/RISCV/RISCVInstrInfoVSDPatterns.td b/llvm/lib/Target/RISCV/RISCVInstrInfoVSDPatterns.td
+index 7afd6def4e4d..e77834147837 100644
+--- a/llvm/lib/Target/RISCV/RISCVInstrInfoVSDPatterns.td
++++ b/llvm/lib/Target/RISCV/RISCVInstrInfoVSDPatterns.td
+@@ -41,6 +41,26 @@ multiclass VPatUSLoadStoreSDNode<ValueType type,
+             (store_instr reg_class:$rs2, GPR:$rs1, avl, log2sew)>;
+ }
+ 
++
++// multiclass VPatUSLoadStoreWholeVRSDNode_I<ValueType type,
++//                                         int log2sew,
++//                                         LMULInfo vlmul,
++//                                         VReg reg_class,
++//                                         int sew = !shl(1, log2sew)> {
++//   defvar load_instr =
++//     !cast<Instruction>("VL"#!substr(vlmul.MX, 1)#"R_I_E"#sew#"_V");
++//   defvar store_instr =
++//     !cast<Instruction>("VS"#!substr(vlmul.MX, 1)#"R_I_V");
++
++//   // Load
++//   def : Pat<(type (load (AddrRegImm (XLenVT GPR:$rs1), simm9:$simm9))),
++//             (load_instr GPR:$rs1, simm9:$simm9)>;
++//   // Store
++//   def : Pat<(store type:$rs2 , (AddrRegImm (XLenVT GPR:$rs1),
++//                    simm9:$simm9)),
++//             (store_instr reg_class:$rs2, GPR:$rs1, simm9:$simm9)>;
++// }
++
+ multiclass VPatUSLoadStoreWholeVRSDNode<ValueType type,
+                                         int log2sew,
+                                         LMULInfo vlmul,
+@@ -902,11 +922,18 @@ foreach vti = !listconcat(FractionalGroupIntegerVectors,
+                        GetVTypePredicates<vti>.Predicates) in 
+   defm : VPatUSLoadStoreSDNode<vti.Vector, vti.Log2SEW, vti.LMul,
+                                vti.AVL, vti.RegClass>;
++// //Load/Store with immediate as offest
++// foreach vti = [VI8M1, VI8M2, VI8M4, VI8M8, VI16M1, VI16M2, VI16M4, VI16M8, VI32M1, VI32M2, VI32M4, VI32M8, VI64M1, VI64M2, VI64M4, VI64M8] in 
++//   defm : VPatUSLoadStoreWholeVRSDNode_I<vti.Vector, vti.Log2SEW, vti.LMul, vti.RegClass>;
++
++
++//Load/Store for Whole Vector Registers
+ foreach vti = [VI8M1, VI16M1, VI32M1, VI64M1, VBF16M1, VF16M1, VF32M1, VF64M1] in
+   let Predicates = !if(!eq(vti.Scalar, f16), [HasVInstructionsF16Minimal],
+                        GetVTypePredicates<vti>.Predicates) in 
+   defm : VPatUSLoadStoreWholeVRSDNode<vti.Vector, vti.Log2SEW, vti.LMul,
+                                       vti.RegClass>;
++//Load/Store for Grouped Vectors
+ foreach vti = !listconcat(GroupIntegerVectors, GroupFloatVectors, GroupBFloatVectors) in
+   let Predicates = !if(!eq(vti.Scalar, f16), [HasVInstructionsF16Minimal],
+                        GetVTypePredicates<vti>.Predicates) in 
