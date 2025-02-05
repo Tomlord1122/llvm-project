@@ -4653,8 +4653,8 @@ VectorizationFactor LoopVectorizationPlanner::selectVectorizationFactor() {
                  !isMoreProfitable(ChosenFactor, ScalarCost)) dbgs()
              << "LV: Vectorization seems to be not beneficial, "
              << "but was forced by a user.\n");
-  LLVM_DEBUG(dbgs() << "LV: Selecting VF: " << ChosenFactor.Width << ".\n");
-  llvm::outs() << "LV: Selecting VF: " << ChosenFactor.Width << ".\n";
+  LLVM_DEBUG(dbgs() << "LV: Selecting VF: " << ChosenFactor.Width << " With Cost: " << ChosenFactor.Cost << ".\n");
+  llvm::outs() << "LV: Selecting VF: " << ChosenFactor.Width << " With Cost: " << ChosenFactor.Cost << ".\n";
   return ChosenFactor;
 }
 

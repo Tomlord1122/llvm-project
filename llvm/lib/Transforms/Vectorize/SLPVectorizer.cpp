@@ -107,6 +107,10 @@ using namespace slpvectorizer;
 #define SV_NAME "slp-vectorizer"
 #define DEBUG_TYPE "SLP"
 
+SmallString<256> ttislp;
+#define STR(a) std::to_string(a.getValue().value())
+#define STRI(a) std::to_string(a)
+
 STATISTIC(NumVectorInstructions, "Number of vector instructions generated");
 
 static cl::opt<bool>

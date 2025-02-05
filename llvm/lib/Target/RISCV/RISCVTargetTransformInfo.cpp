@@ -23,6 +23,7 @@
 using namespace llvm;
 using namespace llvm::PatternMatch;
 extern SmallString<256> ttilog;
+extern SmallString<256> ttislp;
 #define STR(a) std::to_string(a.getValue().value())
 #define STRI(a) std::to_string(a)
 #define DEBUG_TYPE "riscvtti"
@@ -375,6 +376,7 @@ InstructionCost RISCVTTIImpl::getShuffleCost(TTI::ShuffleKind Kind,
   // give a more accurate cost than falling back to generic scalable codegen.
   // TODO: Each of these cases hints at a modeling gap around scalable vectors.
   // llvm::outs() << "@@MVT: " << LT.second << "\n";
+
   if (isa<FixedVectorType>(Tp)) {
     switch (Kind) {
     default:

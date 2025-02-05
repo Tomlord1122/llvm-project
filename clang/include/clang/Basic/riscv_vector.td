@@ -2631,7 +2631,6 @@ let UnMaskedPolicyScheme = HasPassthruOperand in {
     defm vrol    : RVVUnsignedShiftBuiltinSet;
     defm vror    : RVVUnsignedShiftBuiltinSet;
   }
-
   // zvbb
   let RequiredFeatures = ["Zvbb", "Experimental"] in {
     defm vbrev   : RVVOutBuiltinSetZvbb;
