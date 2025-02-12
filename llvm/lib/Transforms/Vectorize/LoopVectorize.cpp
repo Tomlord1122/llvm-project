@@ -4653,8 +4653,12 @@ VectorizationFactor LoopVectorizationPlanner::selectVectorizationFactor() {
                  !isMoreProfitable(ChosenFactor, ScalarCost)) dbgs()
              << "LV: Vectorization seems to be not beneficial, "
              << "but was forced by a user.\n");
-  LLVM_DEBUG(dbgs() << "LV: Selecting VF: " << ChosenFactor.Width << ".\n");
-  llvm::outs() << "LV: Selecting VF: " << ChosenFactor.Width << ".\n";
+  // Final Cost
+  unsigned FinalWidth = ChosenFactor.Width.isScalable() ? ChosenFactor.Width.getKnownMinValue() * getVScaleForTuning(OrigLoop, TTI).value_or(1) : ChosenFactor.Width.getFixedValue();
+  InstructionCost FinalCost = ChosenFactor.Cost / FinalWidth;
+
+  LLVM_DEBUG(dbgs() << "LV: Selecting VF: " << ChosenFactor.Width  << " With Cost: " << FinalCost << ".\n");
+  llvm::outs() << "LV: Selecting VF: " << ChosenFactor.Width << " With Cost: " << FinalCost << ".\n";
   return ChosenFactor;
 }
 
@@ -4975,6 +4979,7 @@ LoopVectorizationCostModel::selectInterleaveCount(ElementCount VF,
     // pair.first is the type of the register.
     // pair.second is the number of registers that are used by the loop.
     unsigned TargetNumRegisters = TTI.getNumberOfRegisters(pair.first);
+    // llvm::outs() << "targetnumregs: " << TargetNumRegisters;
     LLVM_DEBUG(dbgs() << "LV: The target has " << TargetNumRegisters
                       << " registers of "
                       << TTI.getRegisterClassName(pair.first) << " register class\n");
@@ -5007,7 +5012,7 @@ LoopVectorizationCostModel::selectInterleaveCount(ElementCount VF,
 
   // Clamp the interleave ranges to reasonable counts.
   unsigned MaxInterleaveCount = TTI.getMaxInterleaveFactor(VF);
-
+  llvm::outs() << "maxbefore: " << MaxInterleaveCount << "\n";
   // Check if the user has overridden the max.
   if (VF.isScalar()) { 
     // Check if the user has overridden the max.
@@ -5018,7 +5023,7 @@ LoopVectorizationCostModel::selectInterleaveCount(ElementCount VF,
     if (ForceTargetMaxVectorInterleaveFactor.getNumOccurrences() > 0)
       MaxInterleaveCount = ForceTargetMaxVectorInterleaveFactor;
   }
-
+  llvm::outs() << "maxafter: " << MaxInterleaveCount << "\n";
   unsigned EstimatedVF = VF.getKnownMinValue();
   if (VF.isScalable()) {
     if (std::optional<unsigned> VScale = getVScaleForTuning(TheLoop, TTI))

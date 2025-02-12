@@ -1912,6 +1912,12 @@ let TargetPrefix = "riscv" in {
   def int_riscv_factorial : RiscvFactorial;
 }
 
+// MTK Custom Intrinsics
+let TargetPrefix = "riscv" in {
+  class RiscvVreverse : Intrinsic<[llvm_v4i32_ty], [llvm_v4i32_ty], [IntrNoMem]>;
+  def int_riscv_vreverse : RiscvVreverse;
+}
+
 // Vendor extensions
 //===----------------------------------------------------------------------===//
 include "llvm/IR/IntrinsicsRISCVXTHead.td"

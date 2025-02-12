@@ -10644,21 +10644,31 @@ SDValue RISCVTargetLowering::lowerSTEP_VECTOR(SDValue Op,
 // TODO: This code assumes VLMAX <= 65536 for LMUL=8 SEW=16.
 SDValue RISCVTargetLowering::lowerVECTOR_REVERSE(SDValue Op,
                                                  SelectionDAG &DAG) const {
-  SDLoc DL(Op);
-  MVT VecVT = Op.getSimpleValueType();
+  SDLoc DL(Op); // DL means Dag Location
+  MVT VecVT = Op.getSimpleValueType(); // VecVT means Vector Type
+
+
+  // Case 1: Deal with i1 vector
   if (VecVT.getVectorElementType() == MVT::i1) {
     MVT WidenVT = MVT::getVectorVT(MVT::i8, VecVT.getVectorElementCount());
+    // ZERO_EXTEND make <vscale x ? x i1> to <vscale x ? x i8>
     SDValue Op1 = DAG.getNode(ISD::ZERO_EXTEND, DL, WidenVT, Op.getOperand(0));
+    // Reverse the vector
     SDValue Op2 = DAG.getNode(ISD::VECTOR_REVERSE, DL, WidenVT, Op1);
+    // TRUNCATE make <vscale x ? x i8> to <vscale x ? x i1>
     return DAG.getNode(ISD::TRUNCATE, DL, VecVT, Op2);
   }
-  unsigned EltSize = VecVT.getScalarSizeInBits();
-  unsigned MinSize = VecVT.getSizeInBits().getKnownMinValue();
-  unsigned VectorBitsMax = Subtarget.getRealMaxVLen();
-  unsigned MaxVLMAX =
-    RISCVTargetLowering::computeVLMAX(VectorBitsMax, EltSize, MinSize);
+
+  // Case 2: Deal with normal vector types
+  unsigned EltSize = VecVT.getScalarSizeInBits(); //  EltSize means Element Size
+  unsigned MinSize = VecVT.getSizeInBits().getKnownMinValue(); // MinSize means minimum vector bit
+  unsigned VectorBitsMax = Subtarget.getRealMaxVLen(); // Maximum VLEN
+  // Maximum vector element number (consider LMUL and SEW)
+  unsigned MaxVLMAX = 
+    RISCVTargetLowering::computeVLMAX(VectorBitsMax, EltSize, MinSize); 
 
   unsigned GatherOpc = RISCVISD::VRGATHER_VV_VL;
+  // Convert vector element type to integer type for index calculation and manipulation
   MVT IntVT = VecVT.changeVectorElementTypeToInteger();
 
   // If this is SEW=8 and VLMAX is potentially more than 256, we need

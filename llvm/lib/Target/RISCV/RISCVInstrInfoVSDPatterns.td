@@ -794,7 +794,7 @@ multiclass VPatWidenFPMulSacSDNode_VV_VF_RM<string instruction_name> {
                    FRM_DYN,
                    vti.AVL, vti.Log2SEW, TAIL_AGNOSTIC)>;
       def : Pat<(fma (wti.Vector (SplatFPOp (fpext_oneuse (vti.Scalar vti.ScalarRegClass:$rs1)))),
-                     (riscv_fpextend_vl_oneuse (vti.Vector vti.RegClass:$rs2),
+                    (riscv_fpextend_vl_oneuse (vti.Vector vti.RegClass:$rs2),
                                                (vti.Mask true_mask), (XLenVT srcvalue)),
                      (fneg wti.RegClass:$rd)),
                 (!cast<Instruction>(instruction_name#"_V"#vti.ScalarSuffix#"_"#suffix)
