@@ -1,4 +1,4 @@
-def VREVERSE : Instruction {
+def VREVERSE_MTK : Instruction {
   bits<32> Inst;
   let Inst{6-0}   = 0b0101011;         // opcode (custom-1 space)
   let Inst{14-12} = 0b000;            // funct3 (choose an unused funct3)
@@ -8,7 +8,7 @@ def VREVERSE : Instruction {
   let Inst{11-7}  = rd;
   let Inst{19-15} = rs1;
   let Inst{24-20} = rs2;
-  let AsmString   = "vreverse\t$rd, $rs1";
+  let AsmString   = "vrev_mtk\t$rd, $rs1";
   let outs = (outs VR:$vd);          // output operand: vector dest
   let ins  = (ins VR:$vs1);
   let hasSideEffects = 0;
@@ -16,4 +16,6 @@ def VREVERSE : Instruction {
   // (Other flags like let Predicates = [HasRVV, HasExtVReverse] could be added to tie this to features)
 }
 
-def : Pat < (int_riscv_vreverse), (VREVERSE VR:$vs1)>;
+// def : Pat
+def : Pat < (VrevMTK VR:$vs1, $indices, $undef, $mask, $vl),
+            (VREVERSE_MTK VR:$vs1) >;
