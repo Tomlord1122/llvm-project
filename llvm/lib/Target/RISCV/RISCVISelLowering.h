@@ -372,7 +372,7 @@ enum NodeType : unsigned {
   VRGATHER_VX_VL,
   VRGATHER_VV_VL,
   VRGATHEREI16_VV_VL,
-
+  VREVERSEMTK_V_VL,
   // Vector sign/zero extend with additional mask & VL operands.
   VSEXT_VL,
   VZEXT_VL,
