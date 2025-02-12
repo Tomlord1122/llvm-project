@@ -620,8 +620,8 @@ InstructionCost RISCVTTIImpl::getShuffleCost(TTI::ShuffleKind Kind,
     }
     ttilog += "]";
     ttilog += "\t-> ASM: [VID_V, VRSUB_VX, VRGATHER_VV]";
-    return ShuffleCost;
-    // return 1;
+    // return ShuffleCost;
+    return 1;
   }
   }
   return BaseT::getShuffleCost(Kind, Tp, Mask, CostKind, Index, SubTp);
