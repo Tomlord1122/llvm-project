@@ -604,8 +604,6 @@ enum NodeType {
   ///   RESULT[i] = VECTOR[VECTOR.ElementCount - 1 - i]
   VECTOR_REVERSE,
 
-  // MTK custom SDNode Opcodes.
-  VECTOR_REVERSE_MTK,
 
   /// VECTOR_SHUFFLE(VEC1, VEC2) - Returns a vector, of the same type as
   /// VEC1/VEC2.  A VECTOR_SHUFFLE node also contains an array of constant int

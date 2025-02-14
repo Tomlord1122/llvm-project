@@ -776,7 +776,6 @@ def ist        : SDNode<"ISD::STORE"      , SDTIStore,
 
 def vector_shuffle : SDNode<"ISD::VECTOR_SHUFFLE", SDTVecShuffle, []>;
 def vector_reverse : SDNode<"ISD::VECTOR_REVERSE", SDTVecReverse>;
-def vector_reverse_mtk : SDNode<"ISD::VECTOR_REVERSE_MTK", SDTVecReverse>;
 def vector_splice : SDNode<"ISD::VECTOR_SPLICE", SDTVecSlice, []>;
 def build_vector : SDNode<"ISD::BUILD_VECTOR", SDTypeProfile<1, -1, []>, []>;
 def splat_vector : SDNode<"ISD::SPLAT_VECTOR", SDTypeProfile<1, 1, []>, []>;

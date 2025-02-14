@@ -76,3 +76,4 @@ pythonenv*
 /prefer-fixed-arm/
 /riscv-rev
 /llvm-test-suite/
+/riscv-custom

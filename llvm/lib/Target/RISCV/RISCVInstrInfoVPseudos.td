@@ -2653,8 +2653,9 @@ multiclass VPseudoBinaryM_VI<LMULInfo m, int TargetConstraintType = 1> {
 
 multiclass VPseudoVGTR_VV_VX_VI {
   defvar constraint = "@earlyclobber $rd";
+  // MxList is the possible LMUL values -> [V_MF8, V_MF4, V_MF2, V_M1, V_M2, V_M4, V_M8];
   foreach m = MxList in {
-    defvar mx = m.MX;
+    defvar mx = m.MX; // mx is LMUL value (e.g. V_MF8 = 1/8, V_MF4 = 1/4, etc.)
     defm "" : VPseudoBinaryV_VX<m, constraint>,
               SchedBinary<"WriteVRGatherVX", "ReadVRGatherVX_data",
                           "ReadVRGatherVX_index", mx, forceMergeOpRead=true>;
@@ -7451,11 +7452,14 @@ defm : VPatBinaryV_VX<"int_riscv_vfslide1down", "PseudoVFSLIDE1DOWN", AllFloatVe
 //===----------------------------------------------------------------------===//
 defm : VPatBinaryV_VV_VX_VI_INT<"int_riscv_vrgather", "PseudoVRGATHER",
                                 AllIntegerVectors, uimm5>;
+                                
+defm : VPatBinaryV_VV_VX_VI_INT<"int_riscv_vrgather", "PseudoVRGATHER",
+                                AllFloatVectors, uimm5>;
+
 defm : VPatBinaryV_VV_INT_EEW<"int_riscv_vrgatherei16_vv", "PseudoVRGATHEREI16",
                               eew=16, vtilist=AllIntegerVectors>;
 
-defm : VPatBinaryV_VV_VX_VI_INT<"int_riscv_vrgather", "PseudoVRGATHER",
-                                AllFloatVectors, uimm5>;
+
 defm : VPatBinaryV_VV_INT_EEW<"int_riscv_vrgatherei16_vv", "PseudoVRGATHEREI16",
                               eew=16, vtilist=AllFloatVectors>;
 //===----------------------------------------------------------------------===//

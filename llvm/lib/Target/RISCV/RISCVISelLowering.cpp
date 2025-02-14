@@ -6831,8 +6831,6 @@ SDValue RISCVTargetLowering::LowerOperation(SDValue Op,
     return lowerSTEP_VECTOR(Op, DAG);
   case ISD::VECTOR_REVERSE:
     return lowerVECTOR_REVERSE(Op, DAG);
-  case ISD::VECTOR_REVERSE_MTK:
-    return lowerVECTOR_REVERSE_MTK(Op, DAG);
   case ISD::VECTOR_SPLICE:
     return lowerVECTOR_SPLICE(Op, DAG);
   case ISD::BUILD_VECTOR:
@@ -10702,7 +10700,7 @@ SDValue RISCVTargetLowering::lowerVECTOR_REVERSE(SDValue Op,
     GatherOpc = RISCVISD::VRGATHEREI16_VV_VL;
   }
 
-  MVT XLenVT = Subtarget.getXLenVT();
+  MVT XLenVT = Subtarget.getXLenVT(); // -> In our project, we use RV64, so XLenVT is i64
   auto [Mask, VL] = getDefaultScalableVLOps(VecVT, DL, DAG, Subtarget);
 
   // Calculate VLMAX-1 for the desired SEW.
@@ -10726,90 +10724,11 @@ SDValue RISCVTargetLowering::lowerVECTOR_REVERSE(SDValue Op,
 
   return DAG.getNode(GatherOpc, DL, VecVT, Op.getOperand(0), Indices,
                      DAG.getUNDEF(VecVT), Mask, VL);
+  // return DAG.getNode(RISCVISD::VREVERSEMTK_V_VL, DL, VecVT, Op.getOperand(0), Indices,
+  //                   DAG.getUNDEF(VecVT), Mask, VL);
 }
 
-// MTK custom lowering implementation for vector_reverse
-SDValue RISCVTargetLowering::lowerVECTOR_REVERSE_MTK(SDValue Op,
-                                                 SelectionDAG &DAG) const {
-  SDLoc DL(Op); // DL means Dag Location
-  MVT VecVT = Op.getSimpleValueType(); // VecVT means Vector Type
 
-
-  // Case 1: Deal with i1 vector -> Use original method to lowering
-  if (VecVT.getVectorElementType() == MVT::i1) {
-    MVT WidenVT = MVT::getVectorVT(MVT::i8, VecVT.getVectorElementCount());
-    // ZERO_EXTEND make <vscale x ? x i1> to <vscale x ? x i8>
-    SDValue Op1 = DAG.getNode(ISD::ZERO_EXTEND, DL, WidenVT, Op.getOperand(0));
-    // Reverse the vector
-    SDValue Op2 = DAG.getNode(ISD::VECTOR_REVERSE, DL, WidenVT, Op1);
-    // TRUNCATE make <vscale x ? x i8> to <vscale x ? x i1>
-    return DAG.getNode(ISD::TRUNCATE, DL, VecVT, Op2);
-  }
-
-  // Case 2: Deal with normal vector types
-  unsigned EltSize = VecVT.getScalarSizeInBits(); //  EltSize means Element Size
-  unsigned MinSize = VecVT.getSizeInBits().getKnownMinValue(); // MinSize means minimum vector bit
-  unsigned VectorBitsMax = Subtarget.getRealMaxVLen(); // Maximum VLEN
-  // Maximum vector element number (consider LMUL and SEW)
-  unsigned MaxVLMAX = 
-    RISCVTargetLowering::computeVLMAX(VectorBitsMax, EltSize, MinSize); 
-
-  unsigned GatherOpc = RISCVISD::VRGATHER_VV_VL;
-  unsigned VrevMTK = RISCVISD::VREVERSEMTK_V_VL;
-  // Convert vector element type to integer type for index calculation and manipulation
-  MVT IntVT = VecVT.changeVectorElementTypeToInteger();
-
-  // Edge case: using original method: vrgatherei16.vv to lowering
-  if (MaxVLMAX > 256 && EltSize == 8) {
-    // If this is LMUL=8, we have to split before can use vrgatherei16.vv.
-    // Reverse each half, then reassemble them in reverse order.
-    // NOTE: It's also possible that after splitting that VLMAX no longer
-    // requires vrgatherei16.vv.
-    if (MinSize == (8 * RISCV::RVVBitsPerBlock)) {
-      auto [Lo, Hi] = DAG.SplitVectorOperand(Op.getNode(), 0);
-      auto [LoVT, HiVT] = DAG.GetSplitDestVTs(VecVT);
-      Lo = DAG.getNode(ISD::VECTOR_REVERSE, DL, LoVT, Lo);
-      Hi = DAG.getNode(ISD::VECTOR_REVERSE, DL, HiVT, Hi);
-      // Reassemble the low and high pieces reversed.
-      // FIXME: This is a CONCAT_VECTORS.
-      SDValue Res =
-          DAG.getNode(ISD::INSERT_SUBVECTOR, DL, VecVT, DAG.getUNDEF(VecVT), Hi,
-                      DAG.getVectorIdxConstant(0, DL));
-      return DAG.getNode(
-          ISD::INSERT_SUBVECTOR, DL, VecVT, Res, Lo,
-          DAG.getVectorIdxConstant(LoVT.getVectorMinNumElements(), DL));
-    }
-
-    // Just promote the int type to i16 which will double the LMUL.
-    IntVT = MVT::getVectorVT(MVT::i16, VecVT.getVectorElementCount());
-    GatherOpc = RISCVISD::VRGATHEREI16_VV_VL;
-  }
-
-  MVT XLenVT = Subtarget.getXLenVT();
-  auto [Mask, VL] = getDefaultScalableVLOps(VecVT, DL, DAG, Subtarget);
-
-  // Calculate VLMAX-1 for the desired SEW.
-  SDValue VLMinus1 = DAG.getNode(ISD::SUB, DL, XLenVT,
-                                 computeVLMax(VecVT, DL, DAG),
-                                 DAG.getConstant(1, DL, XLenVT));
-
-  // Splat VLMAX-1 taking care to handle SEW==64 on RV32.
-  bool IsRV32E64 =
-      !Subtarget.is64Bit() && IntVT.getVectorElementType() == MVT::i64;
-  SDValue SplatVL;
-  if (!IsRV32E64)
-    SplatVL = DAG.getSplatVector(IntVT, DL, VLMinus1);
-  else
-    SplatVL = DAG.getNode(RISCVISD::VMV_V_X_VL, DL, IntVT, DAG.getUNDEF(IntVT),
-                          VLMinus1, DAG.getRegister(RISCV::X0, XLenVT));
-
-  SDValue VID = DAG.getNode(RISCVISD::VID_VL, DL, IntVT, Mask, VL);
-  SDValue Indices = DAG.getNode(RISCVISD::SUB_VL, DL, IntVT, SplatVL, VID,
-                                DAG.getUNDEF(IntVT), Mask, VL);
-
-  return DAG.getNode(VrevMTK, DL, VecVT, Op.getOperand(0), Indices,
-                     DAG.getUNDEF(VecVT), Mask, VL);
-}
 
 SDValue RISCVTargetLowering::lowerVECTOR_SPLICE(SDValue Op,
                                                 SelectionDAG &DAG) const {
