@@ -531,13 +531,6 @@ class VALUVs2<bits<6> funct6, bits<5> vs1, RISCVVFormat opv, string opcodestr>
     : RVInstV<funct6, vs1, opv, (outs VR:$vd),
                (ins VR:$vs2, VMaskOp:$vm),
                opcodestr, "$vd, $vs2$vm">;
-
-
-// op vd, vs2, 
-class VALUVs2_MTK<bits<6> funct6, bits<5> vs1, RISCVVFormat opv, string opcodestr, string VRegClass>
-    : RVInstV_MTK<funct6, vs1, opv, (outs VRegClass:$vd),
-               (ins VRegClass:$vs2),
-               opcodestr, "$vd, $vs2">;
 }
 // hasSideEffects = 0, mayLoad = 0, mayStore = 0
 

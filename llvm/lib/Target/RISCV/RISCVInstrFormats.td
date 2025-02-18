@@ -240,6 +240,7 @@ class RVInst<dag outs, dag ins, string opcodestr, string argstr,
   let Size = 4;
 }
 
+// In RISCVInstrFormats.td
 // Pseudo instructions
 class Pseudo<dag outs, dag ins, list<dag> pattern, string opcodestr = "", string argstr = "">
     : RVInst<outs, ins, opcodestr, argstr, pattern, InstFormatPseudo> {

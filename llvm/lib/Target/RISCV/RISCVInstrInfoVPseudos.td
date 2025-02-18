@@ -520,6 +520,7 @@ defset list<VTypeInfoToWide> AllWidenableBFloatToFloatVectors = {
 // This represents the information we need in codegen for each pseudo.
 // The definition should be consistent with `struct PseudoInfo` in
 // RISCVInstrInfo.h.
+// InRISCVInstrInfoVPseudos.td
 class RISCVVPseudo {
   Pseudo Pseudo = !cast<Pseudo>(NAME); // Used as a key.
   Instruction BaseInstr = !cast<Instruction>(PseudoToVInst<NAME>.VInst);
@@ -528,6 +529,7 @@ class RISCVVPseudo {
   bit NeedBeInPseudoTable = 1;
 }
 
+// RISCVInstrInfoVPseudos.td
 // The actual table.
 def RISCVVPseudosTable : GenericTable {
   let FilterClass = "RISCVVPseudo";
@@ -1005,8 +1007,9 @@ class VPseudoNullaryPseudoM<string BaseInst> :
   let BaseInstr = !cast<Instruction>(BaseInst);
   // We exclude them from RISCVVPseudoTable.
   let NeedBeInPseudoTable = 0;
-}
+} 
 
+// In RISCVInstrInfoVPseudos.td
 class VPseudoUnaryNoMask<DAGOperand RetClass,
                          DAGOperand OpClass,
                          string Constraint = "",

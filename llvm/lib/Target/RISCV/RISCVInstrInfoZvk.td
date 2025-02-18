@@ -418,6 +418,16 @@ multiclass VPseudoUnaryV_V<LMULInfo m> {
   }
 }
 
+// multiclass VPseudoUnaryV_V_REV<LMULInfo m> {
+//   let VLMul = m.value in {
+//     foreach eew = [8, 16, 32, 64] in {
+//       def "_V_e"#eew#m.MX : VPseudoUnaryNoMask<m.vrclass, m.vrclass> {
+//         let Predicates = [HasVInstructions];
+//       }
+//     }
+//   } 
+// }
+
 multiclass VPseudoVBREV {
   foreach m = MxList in {
     defvar mx = m.MX;
@@ -567,7 +577,7 @@ let Predicates = [HasStdExtZvksh] in {
 //===----------------------------------------------------------------------===//
 // SDNode patterns
 //===----------------------------------------------------------------------===//
-
+// RISCVInstrInfoZvk.td
 multiclass VPatUnarySDNode_V<SDPatternOperator op, string instruction_name,
                              Predicate predicate = HasStdExtZvbb> {
   foreach vti = AllIntegerVectors in {

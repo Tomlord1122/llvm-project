@@ -372,7 +372,7 @@ enum NodeType : unsigned {
   VRGATHER_VX_VL,
   VRGATHER_VV_VL,
   VRGATHEREI16_VV_VL,
-  VREVERSEMTK_V_VL,
+  
   // Vector sign/zero extend with additional mask & VL operands.
   VSEXT_VL,
   VZEXT_VL,
@@ -411,6 +411,7 @@ enum NodeType : unsigned {
   /// Software guarded BRIND node. Operand 0 is the chain operand and
   /// operand 1 is the target address.
   SW_GUARDED_BRIND,
+  VREVERSEMTK_V_VL,
 
   // FP to 32 bit int conversions for RV64. These are used to keep track of the
   // result being sign extended to 64 bit. These saturate out of range inputs.
@@ -954,6 +955,7 @@ private:
   SDValue lowerVECTOR_INTERLEAVE(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerSTEP_VECTOR(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerVECTOR_REVERSE(SDValue Op, SelectionDAG &DAG) const;
+  SDValue lowerVECTOR_REVERSE_MTK(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerVECTOR_SPLICE(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerABS(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerMaskedLoad(SDValue Op, SelectionDAG &DAG) const;

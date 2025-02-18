@@ -6830,7 +6830,8 @@ SDValue RISCVTargetLowering::LowerOperation(SDValue Op,
   case ISD::STEP_VECTOR:
     return lowerSTEP_VECTOR(Op, DAG);
   case ISD::VECTOR_REVERSE:
-    return lowerVECTOR_REVERSE(Op, DAG);
+    // return lowerVECTOR_REVERSE(Op, DAG);
+    return lowerVECTOR_REVERSE_MTK(Op, DAG);
   case ISD::VECTOR_SPLICE:
     return lowerVECTOR_SPLICE(Op, DAG);
   case ISD::BUILD_VECTOR:
@@ -10724,9 +10725,79 @@ SDValue RISCVTargetLowering::lowerVECTOR_REVERSE(SDValue Op,
 
   return DAG.getNode(GatherOpc, DL, VecVT, Op.getOperand(0), Indices,
                      DAG.getUNDEF(VecVT), Mask, VL);
-  // return DAG.getNode(RISCVISD::VREVERSEMTK_V_VL, DL, VecVT, Op.getOperand(0), Indices,
-  //                   DAG.getUNDEF(VecVT), Mask, VL);
+
 }
+
+
+SDValue RISCVTargetLowering::lowerVECTOR_REVERSE_MTK(SDValue Op,
+                                                 SelectionDAG &DAG) const {
+  SDLoc DL(Op); // DL means Dag Location
+  MVT VecVT = Op.getSimpleValueType(); // VecVT means Vector Type
+
+
+  // Case 1: Deal with i1 vector
+  if (VecVT.getVectorElementType() == MVT::i1) {
+    MVT WidenVT = MVT::getVectorVT(MVT::i8, VecVT.getVectorElementCount());
+    // ZERO_EXTEND make <vscale x ? x i1> to <vscale x ? x i8>
+    SDValue Op1 = DAG.getNode(ISD::ZERO_EXTEND, DL, WidenVT, Op.getOperand(0));
+    // Reverse the vector
+    SDValue Op2 = DAG.getNode(ISD::VECTOR_REVERSE, DL, WidenVT, Op1);
+    // TRUNCATE make <vscale x ? x i8> to <vscale x ? x i1>
+    return DAG.getNode(ISD::TRUNCATE, DL, VecVT, Op2);
+  }
+
+  // Case 2: Deal with normal vector types
+  unsigned EltSize = VecVT.getScalarSizeInBits(); //  EltSize means Element Size
+  unsigned MinSize = VecVT.getSizeInBits().getKnownMinValue(); // MinSize means minimum vector bit
+  unsigned VectorBitsMax = Subtarget.getRealMaxVLen(); // Maximum VLEN
+  // Maximum vector element number (consider LMUL and SEW)
+  unsigned MaxVLMAX = 
+    RISCVTargetLowering::computeVLMAX(VectorBitsMax, EltSize, MinSize); 
+
+  unsigned GatherOpc = RISCVISD::VRGATHER_VV_VL;
+  // Convert vector element type to integer type for index calculation and manipulation
+  MVT IntVT = VecVT.changeVectorElementTypeToInteger();
+
+  // If this is SEW=8 and VLMAX is potentially more than 256, we need
+  // to use vrgatherei16.vv.
+  // TODO: It's also possible to use vrgatherei16.vv for other types to
+  // decrease register width for the index calculation.
+  if (MaxVLMAX > 256 && EltSize == 8) {
+    // If this is LMUL=8, we have to split before can use vrgatherei16.vv.
+    // Reverse each half, then reassemble them in reverse order.
+    // NOTE: It's also possible that after splitting that VLMAX no longer
+    // requires vrgatherei16.vv.
+    if (MinSize == (8 * RISCV::RVVBitsPerBlock)) {
+      auto [Lo, Hi] = DAG.SplitVectorOperand(Op.getNode(), 0);
+      auto [LoVT, HiVT] = DAG.GetSplitDestVTs(VecVT);
+      Lo = DAG.getNode(ISD::VECTOR_REVERSE, DL, LoVT, Lo);
+      Hi = DAG.getNode(ISD::VECTOR_REVERSE, DL, HiVT, Hi);
+      // Reassemble the low and high pieces reversed.
+      // FIXME: This is a CONCAT_VECTORS.
+      SDValue Res =
+          DAG.getNode(ISD::INSERT_SUBVECTOR, DL, VecVT, DAG.getUNDEF(VecVT), Hi,
+                      DAG.getVectorIdxConstant(0, DL));
+      return DAG.getNode(
+          ISD::INSERT_SUBVECTOR, DL, VecVT, Res, Lo,
+          DAG.getVectorIdxConstant(LoVT.getVectorMinNumElements(), DL));
+    }
+
+  }
+
+  // Case 2: For normal vector types, lower directly to the custom vrev instruction.
+  // Determine the element width (SEW) of the vector.
+  unsigned Eew = VecVT.getScalarSizeInBits();
+  // Ensure we support only 8, 16, 32, or 64 bits.
+  assert((Eew == 8 || Eew == 16 || Eew == 32 || Eew == 64) &&
+         "Unsupported element width for vector reverse!");
+
+  // Lower to a custom DAG node with opcode RISCVISD::VREVERSEMTK_V_VL.
+  // This node will be matched by your TableGen patterns (e.g., VREV_V_e8, VREV_V_e16, etc.)
+  // which will select the proper machine instruction variant based on the element width.
+  return DAG.getNode(RISCVISD::VREVERSEMTK_V_VL, DL, VecVT, Op.getOperand(0));
+
+}
+
 
 
 
@@ -20637,6 +20708,7 @@ const char *RISCVTargetLowering::getTargetNodeName(unsigned Opcode) const {
   NODE_NAME_CASE(SF_VC_V_XVW_SE)
   NODE_NAME_CASE(SF_VC_V_IVW_SE)
   NODE_NAME_CASE(SF_VC_V_VVW_SE)
+  NODE_NAME_CASE(VREVERSEMTK_V_VL)
   NODE_NAME_CASE(SF_VC_V_FVW_SE)
   }
   // clang-format on
