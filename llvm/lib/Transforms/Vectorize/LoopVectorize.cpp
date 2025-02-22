@@ -8858,8 +8858,8 @@ LoopVectorizationPlanner::tryToBuildVPlanWithVPRecipes(VFRange &Range) {
   if (useActiveLaneMask(Style)) {
     // TODO: Move checks to VPlanTransforms::addActiveLaneMask once
     // TailFoldingStyle is visible there.
-    bool ForControlFlow = useActiveLaneMaskForControlFlow(Style);
-    bool WithoutRuntimeCheck =
+    bool ForControlFlow = useActiveLaneMaskForControlFlow(Style); // 0
+    bool WithoutRuntimeCheck =                                    // 0
         Style == TailFoldingStyle::DataAndControlFlowWithoutRuntimeCheck;
     VPlanTransforms::addActiveLaneMask(*Plan, ForControlFlow,
                                        WithoutRuntimeCheck);

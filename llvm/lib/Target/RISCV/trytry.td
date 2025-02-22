@@ -24,6 +24,27 @@ def RISCVVInversePseudosTable : GenericTable {
 //===----------------------------------------------------------------------===//
 // VREV8 instruction format and definition in zvkb extension
 //===----------------------------------------------------------------------===//
+// RISCVInstrFormatsV.td
+class RVInstV<bits<6> funct6, bits<5> vs1, RISCVVFormat opv, dag outs,
+              dag ins, string opcodestr, string argstr>
+    : RVInst<outs, ins, opcodestr, argstr, [], InstFormatR> {
+  bits<5> vs2;
+  bits<5> vd;
+  bit vm;
+
+  let Inst{31-26} = funct6;
+  let Inst{25} = vm;
+  let Inst{24-20} = vs2;
+  let Inst{19-15} = vs1;
+  let Inst{14-12} = opv.Value;
+  let Inst{11-7} = vd;
+  let Inst{6-0} = OPC_OP_V.Value; 
+
+  let Uses = [VTYPE, VL];
+  let RVVConstraint = VMConstraint;
+}
+
+// RISCVInstrInfoV.td
 let hasSideEffects = 0, mayLoad = 1, mayStore = 0 in {
   class VALUVs2<bits<6> funct6, bits<5> vs1, RISCVVFormat opv, string opcodestr>
     : RVInstV<funct6, vs1, opv, (outs VR:$vd),
@@ -31,8 +52,9 @@ let hasSideEffects = 0, mayLoad = 1, mayStore = 0 in {
                 opcodestr, "$vd, $vs2$vm">;
 }
 
+// RISCVInstrInfoZvk.td
 let Predicates = [HasStdExtZvkb] in {
-  defm VREV8V : VALUVs2<0b010010, 0b01001, OPMVV, "vrev8.v">;
+  def VREV8V : VALUVs2<0b010010, 0b01001, OPMVV, "vrev8.v">; 
 }
 
 
@@ -43,6 +65,7 @@ let Predicates = [HasStdExtZvkb] in {
 //--------------------------------
 // Class related to VPseudoUnaryV_V
 //--------------------------------
+// RISCVInstrInfoVPseudos.td
 class PseudoToVInst<string PseudoInst> {
   defvar AffixSubsts = [["Pseudo", ""],
                         ["_E64", ""],
@@ -75,7 +98,7 @@ class PseudoToVInst<string PseudoInst> {
                         !subst(AffixSubst[0], AffixSubst[1], Acc));
 }
 
-
+// RISCVInstrFormats.td
 class Pseudo<dag outs, dag ins, list<dag> pattern, string opcodestr = "", string argstr = "">
     : RVInst<outs, ins, opcodestr, argstr, pattern, InstFormatPseudo> {
   let isPseudo = 1;
@@ -86,7 +109,8 @@ class Pseudo<dag outs, dag ins, list<dag> pattern, string opcodestr = "", string
 // This represents the information we need in codegen for each pseudo.
 // The definition should be consistent with `struct PseudoInfo` in
 // RISCVInstrInfo.h.
-// InRISCVInstrInfoVPseudos.td
+
+// RISCVInstrInfoVPseudos.td
 class RISCVVPseudo {
   Pseudo Pseudo = !cast<Pseudo>(NAME); // Used as a key.
   Instruction BaseInstr = !cast<Instruction>(PseudoToVInst<NAME>.VInst);
@@ -95,7 +119,7 @@ class RISCVVPseudo {
   bit NeedBeInPseudoTable = 1;
 }
 
-
+// RISCVInstrInfoVPseudos.td
 class VPseudoUnaryNoMask<DAGOperand RetClass,
                          DAGOperand OpClass,
                          string Constraint = "",
@@ -114,6 +138,7 @@ class VPseudoUnaryNoMask<DAGOperand RetClass,
   let HasVecPolicyOp = 1;
 }
 
+// RISCVInstrInfoVPseudos.td
 class VPseudoUnaryMask<VReg RetClass,
                        VReg OpClass,
                        string Constraint = "",
@@ -139,6 +164,8 @@ class VPseudoUnaryMask<VReg RetClass,
 //    unmasked variant.  For all but compares, both the masked and
 //    unmasked variant have a passthru and policy operand.  For compares,
 //    neither has a policy op, and only the masked version has a passthru.
+
+// RISCVInstrInfoVPseudos.td
 class RISCVMaskedPseudo<bits<4> MaskIdx, bit ActiveAffectsRes=false> {
   Pseudo MaskedPseudo = !cast<Pseudo>(NAME);
   Pseudo UnmaskedPseudo = !cast<Pseudo>(!subst("_MASK", "", NAME));
@@ -146,6 +173,7 @@ class RISCVMaskedPseudo<bits<4> MaskIdx, bit ActiveAffectsRes=false> {
   bit ActiveElementsAffectResult = ActiveAffectsRes;
 }
 
+// RISCVInstrInfoVPseudos.td
 // This class describes information associated to the LMUL.
 class LMULInfo<int lmul, int oct, VReg regclass, VReg wregclass,
                VReg f2regclass, VReg f4regclass, VReg f8regclass, string mx> {
@@ -159,6 +187,7 @@ class LMULInfo<int lmul, int oct, VReg regclass, VReg wregclass,
   int octuple = oct;
 }
 
+// RISCVInstrInfoZvk.td
 multiclass VPseudoUnaryV_V<LMULInfo m> {
   let VLMul = m.value in {
     defvar suffix = "_V_" # m.MX;
@@ -181,6 +210,8 @@ multiclass VPseudoUnaryV_V<LMULInfo m> {
 //   `reads`        SchedReads that are listed for each explicit use operand.
 //   `forceMasked`  Forced to be masked (e.g. Add-with-Carry Instructions).
 //   `forceMergeOpRead` Force to have read for merge operand.
+
+// RISCVInstrInfoV.td
 class SchedCommon<list<SchedWrite> writes, list<SchedRead> reads,
                   string mx = "WorstCase", int sew = 0, bit forceMasked = 0,
                   bit forceMergeOpRead = 0> : Sched<[]> {
@@ -199,6 +230,8 @@ let SchedRW = !listconcat(writes, allReads);
 
 // Common class of scheduling definitions for n-ary instructions.
 // The scheudling resources are relevant to LMUL and may be relevant to SEW.
+
+// RISCVInstrInfoV.td
 class SchedNary<string write, list<string> reads, string mx, int sew = 0,
                 bit forceMasked = 0, bit forceMergeOpRead = 0>
     : SchedCommon<[!cast<SchedWrite>(
@@ -214,6 +247,8 @@ class SchedUnary<string write, string read0, string mx, int sew = 0,
                  bit forceMasked = 0, bit forceMergeOpRead = 0>:
   SchedNary<write, [read0], mx, sew, forceMasked, forceMergeOpRead>;
 
+
+// RISCVInstrInfoZvk.td
 multiclass VPseudoVREV8 {
   foreach m = MxList in {
     defvar mx = m.MX;

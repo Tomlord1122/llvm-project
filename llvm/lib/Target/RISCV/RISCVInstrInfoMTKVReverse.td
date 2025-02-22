@@ -28,7 +28,7 @@ class VALUVs2_MTK<bits<6> funct6, bits<5> vs1, RISCVVFormat opv, string opcodest
 }
 
 
-
+// vs1 -> 5bits 
 multiclass VREVE_EEW<bits<2> eew_enc, int eew> {
     def M1  : VALUVs2_MTK<0b010010, {eew_enc, 0b000}, OPMVV, 
               "vrev"#eew#".v", VR>;
@@ -65,13 +65,14 @@ multiclass VPseudoUnaryV_V_REV<LMULInfo m> {
   } 
 }
 
-// defm "" : LMULSchedWrites<"WriteVREV8V">;
-// defm "" : LMULSchedReads<"ReadVREV8V">;
+// defm "" : LMULSchedWrites<"WriteVREV">;
+// defm "" : LMULSchedReads<"ReadVREV">;
 defvar MxList_REV = [V_M1, V_M2, V_M4, V_M8];
 
 multiclass VPseudoVREV {
   foreach m = MxList_REV in {
     defm "" : VPseudoUnaryV_V_REV<m>, 
+              SchedUnary<"WriteVREV8V", "ReadVREV8V", m.MX, forceMergeOpRead=true>;
   }
 }
 
@@ -105,5 +106,22 @@ multiclass VPatUnarySDNode_V_REV<SDPatternOperator op, string instruction_name,
 }
 
 
+// multiclass VPatUnarySDNode_V_REV_F<SDPatternOperator op, string instruction_name,
+//                              Predicate predicate = HasVInstructions> {
+//   foreach vti = [VF16M1, VF32M1, VF64M1, VF16M2, VF16M4, VF16M8, VF32M2, VF32M4, VF32M8, VF64M2, VF64M4, VF64M8] in {
+//     let Predicates = !listconcat([predicate],
+//                                  GetVTypePredicates<vti>.Predicates) in {
+//       def : Pat<(vti.Vector (op (vti.Vector vti.RegClass:$vs2))),
+//                 (!cast<Instruction>(instruction_name#"_V_f"#vti.SEW#vti.LMul.MX)
+//                    (vti.Vector (IMPLICIT_DEF)),
+//                    vti.RegClass:$vs2,
+//                    vti.AVL, vti.Log2SEW, TA_MA)>;
+//     }
+//   }
+// }
+
 defm : VPatUnarySDNode_V_REV<riscv_vreversemtk_v_vl, "PseudoVREV", HasVInstructions>;
+// defm : VPatUnarySDNode_V_REV<riscv_vreversemtk_v_vl, "VREV", HasVInstructions>;
+
+
 
