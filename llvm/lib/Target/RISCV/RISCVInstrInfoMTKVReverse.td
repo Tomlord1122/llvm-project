@@ -29,21 +29,24 @@ class VALUVs2_MTK<bits<6> funct6, bits<5> vs1, RISCVVFormat opv, string opcodest
 
 
 // vs1 -> 5bits 
-multiclass VREVE_EEW<bits<2> eew_enc, int eew> {
-    def M1  : VALUVs2_MTK<0b010010, {eew_enc, 0b000}, OPMVV, 
+multiclass VREVE_EEW<bits<3> eew_enc, int eew> {
+    def M1  : VALUVs2_MTK<0b010010, {eew_enc, 0b00}, OPMVV, 
               "vrev"#eew#".v", VR>;
-    def M2  : VALUVs2_MTK<0b010010, {eew_enc, 0b001}, OPMVV, 
+    def M2  : VALUVs2_MTK<0b010010, {eew_enc, 0b01}, OPMVV, 
               "vrev"#eew#".v", VRM2>;
-    def M4  : VALUVs2_MTK<0b010010, {eew_enc, 0b010}, OPMVV, 
+    def M4  : VALUVs2_MTK<0b010010, {eew_enc, 0b10}, OPMVV, 
               "vrev"#eew#".v", VRM4>;
-    def M8  : VALUVs2_MTK<0b010010, {eew_enc, 0b011}, OPMVV, 
+    def M8  : VALUVs2_MTK<0b010010, {eew_enc, 0b11}, OPMVV, 
               "vrev"#eew#".v", VRM8>;
 }
 // Assembly code may look like this: vrev8.v vd, vs2, vrev16.v vd, vs2, vrev32.v vd, vs2, vrev64.v vd, vs2,
-defm VREV_V_e8 : VREVE_EEW<0b00, 8>;
-defm VREV_V_e16 : VREVE_EEW<0b01, 16>;
-defm VREV_V_e32 : VREVE_EEW<0b10, 32>;
-defm VREV_V_e64 : VREVE_EEW<0b11, 64>;
+defm VREV_V_e8 : VREVE_EEW<0b000, 8>;
+defm VREV_V_e16 : VREVE_EEW<0b001, 16>;
+defm VREV_V_e32 : VREVE_EEW<0b010, 32>;
+defm VREV_V_e64 : VREVE_EEW<0b011, 64>;
+defm VREV_V_e16f : VREVE_EEW<0b101, 16>;
+defm VREV_V_e32f : VREVE_EEW<0b110, 32>;
+defm VREV_V_e64f : VREVE_EEW<0b111, 64>;
 
 // When expand VREV_V_e8, VREV_V_e16, VREV_V_e32, VREV_V_e64, we will get the following instructions
 // VREV_V_e8M1, VREV_V_e16M1, VREV_V_e32M1, VREV_V_e64M1
@@ -59,6 +62,12 @@ multiclass VPseudoUnaryV_V_REV<LMULInfo m> {
   let VLMul = m.value in {
     foreach eew = [8, 16, 32, 64] in {
       def "_V_e"#eew#m.MX : VPseudoUnaryNoMask<m.vrclass, m.vrclass> {
+        let Predicates = [HasVInstructions];
+      }
+    } 
+
+    foreach eew = [16, 32, 64] in {
+      def "_V_e"#eew#"f"#m.MX : VPseudoUnaryNoMask<m.vrclass, m.vrclass> {
         let Predicates = [HasVInstructions];
       }
     }
@@ -101,6 +110,17 @@ multiclass VPatUnarySDNode_V_REV<SDPatternOperator op, string instruction_name,
                    (vti.Vector (IMPLICIT_DEF)),
                    vti.RegClass:$vs2,
                    vti.AVL, vti.Log2SEW, TA_MA)>;
+    }
+
+    foreach vti = [VF16M1, VF32M1, VF64M1, VF16M2, VF16M4, VF16M8, VF32M2, VF32M4, VF32M8, VF64M2, VF64M4, VF64M8] in {
+    let Predicates = !listconcat([predicate],
+                                 GetVTypePredicates<vti>.Predicates) in {
+      def : Pat<(vti.Vector (op (vti.Vector vti.RegClass:$vs2))),
+                (!cast<Instruction>(instruction_name#"_V_e"#vti.SEW#"f"#vti.LMul.MX)
+                   (vti.Vector (IMPLICIT_DEF)),
+                   vti.RegClass:$vs2,
+                   vti.AVL, vti.Log2SEW, TA_MA)>;
+    }
     }
   }
 }
