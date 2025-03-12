@@ -195,17 +195,17 @@ multiclass VPatUnarySDNode_V_REV<SDPatternOperator op, string instruction_name,
                    vti.AVL, vti.Log2SEW, TA_MA)>;
     }
   }
-    foreach vti = [VF16MF4, VF16MF2, VF32MF2, VF16M1, VF32M1, VF64M1, VF16M2, VF16M4, VF16M8, VF32M2, VF32M4, VF32M8, VF64M2, VF64M4, VF64M8] in {
-      let Predicates = !listconcat([predicate],
-                                  GetVTypePredicates<vti>.Predicates) in {
-        def : Pat<(vti.Vector (op (vti.Vector vti.RegClass:$vs2))),
-                  (!cast<Instruction>(instruction_name#"_V_e"#vti.SEW#"f"#vti.LMul.MX)
-                    (vti.Vector (IMPLICIT_DEF)),
-                    vti.RegClass:$vs2,
-                    vti.AVL, vti.Log2SEW, TA_MA)>;
-      }
+  foreach vti = [VF16MF4, VF16MF2, VF32MF2, VF16M1, VF32M1, VF64M1, VF16M2, VF16M4, VF16M8, VF32M2, VF32M4, VF32M8, VF64M2, VF64M4, VF64M8] in {
+    let Predicates = !listconcat([predicate],
+                                GetVTypePredicates<vti>.Predicates) in {
+      def : Pat<(vti.Vector (op (vti.Vector vti.RegClass:$vs2))),
+                (!cast<Instruction>(instruction_name#"_V_e"#vti.SEW#"f"#vti.LMul.MX)
+                  (vti.Vector (IMPLICIT_DEF)),
+                  vti.RegClass:$vs2,
+                  vti.AVL, vti.Log2SEW, TA_MA)>;
     }
   }
+}
 
 
 
