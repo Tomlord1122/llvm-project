@@ -10826,51 +10826,77 @@ SDValue RISCVTargetLowering::lowerVECTOR_REVERSE(SDValue Op,
                      DAG.getUNDEF(VecVT), Mask, VL);
 }
 
+
 SDValue RISCVTargetLowering::lowerVECTOR_REVERSE_MTK(SDValue Op,
                                                      SelectionDAG &DAG) const {
-  SDLoc DL(Op);                        // DL means Dag Location
-  MVT VecVT = Op.getSimpleValueType(); // VecVT means Vector Type
+  SDLoc DL(Op);
+  MVT VecVT = Op.getSimpleValueType();
+  MVT XLenVT = Subtarget.getXLenVT(); // Needed for constants like Log2SEW, TA_MA
+  // 獲取向量配置資訊
+  unsigned EltSize = VecVT.getScalarSizeInBits(); // SEW
+  unsigned MinSize = VecVT.getSizeInBits().getKnownMinValue();
+  unsigned VectorBitsMax = Subtarget.getRealMaxVLen(); // VLEN
+  unsigned MaxVLMAX = RISCVTargetLowering::computeVLMAX(VectorBitsMax, EltSize, MinSize);
+  unsigned Log2SEW = Log2_64(EltSize);
 
-  unsigned Eew = VecVT.getScalarSizeInBits();
-  llvm::errs() << "VECTOR_REVERSE_MTK VecVT: " << VecVT << "\n";
-  llvm::errs() << "VECTOR_REVERSE_MTK Eew: " << Eew << "\n";
 
   auto [Mask, VL] = getDefaultScalableVLOps(VecVT, DL, DAG, Subtarget);
-  unsigned Log2SEW = Log2_64(Eew);
-  MVT XLenVT = Subtarget.getXLenVT();
 
-  unsigned EltSize = VecVT.getScalarSizeInBits(); //  EltSize means Element Size
-  unsigned MinSize =
-      VecVT.getSizeInBits()
-          .getKnownMinValue(); // MinSize means minimum vector bit
-  unsigned VectorBitsMax = Subtarget.getRealMaxVLen(); // Maximum VLEN
-  // Maximum vector element number (consider LMUL and SEW)
-  unsigned MaxVLMAX =
-      RISCVTargetLowering::computeVLMAX(VectorBitsMax, EltSize, MinSize);
 
-  MVT IntVT = VecVT.changeVectorElementTypeToInteger();
-  llvm::errs() << "VECTOR_REVERSE_MTK IntVT: " << IntVT << "\n";
-  // Case 1: Deal with i1 vector
-  if (VecVT.getVectorElementType() == MVT::i1 || (MaxVLMAX > 256 && EltSize == 8) || Eew == 8) {
-      return lowerVECTOR_REVERSE(Op, DAG);
+  // Case 1: Handle i1 vector 
+  if (VecVT.getVectorElementType() == MVT::i1) {
+    MVT WidenVT = MVT::getVectorVT(MVT::i8, VecVT.getVectorElementCount());
+    SDValue Op1 = DAG.getNode(ISD::ZERO_EXTEND, DL, WidenVT, Op.getOperand(0));
+    SDValue Op2 = DAG.getNode(ISD::VECTOR_REVERSE, DL, WidenVT, Op1);
+    return DAG.getNode(ISD::TRUNCATE, DL, VecVT, Op2);
   }
 
-  // eew = 16, 32, 64
+  // Case 2: Handle all other vector types directly using VREVERSEMTK_V_VL
+  // No need to check 
+  ElementCount VecEC = VecVT.getVectorElementCount();
+  unsigned NumElements = VecEC.isScalable() ? VecEC.getKnownMinValue() : VecEC.getFixedValue();
+
+  // 情況 2：向量長度超過 VLMAX，需要分段處理
+  if (NumElements > MaxVLMAX) {
+    // 分段邏輯：將向量分成多個 VLMAX 大小的塊
+    unsigned Iterations = (NumElements + MaxVLMAX - 1) / MaxVLMAX; // ceil(NumElements / MaxVLMAX)
+    SDValue Result = DAG.getUNDEF(VecVT); // 最終結果向量
+
+    for (unsigned i = 0; i < Iterations; ++i) {
+      unsigned Offset = i * MaxVLMAX;
+      unsigned Remaining = NumElements - Offset;
+      unsigned CurrentVL = std::min(Remaining, MaxVLMAX);
+
+      // 提取當前段
+      SDValue SubVec = DAG.getNode(ISD::EXTRACT_SUBVECTOR, DL, 
+                                   MVT::getVectorVT(VecVT.getScalarType(), CurrentVL),
+                                   Op.getOperand(0), DAG.getConstant(Offset, DL, XLenVT));
+
+      // 設定當前 vl
+      SDValue CurrentVLVal = DAG.getConstant(CurrentVL, DL, XLenVT);
+      SDValue TA_MA = DAG.getConstant(0, DL, XLenVT); // Tail Agnostic, Mask Agnostic
+
+      // 使用 vrev 反轉當前段
+      SDValue ReversedSubVec = DAG.getNode(RISCVISD::VREVERSEMTK_V_VL, DL, 
+                                           SubVec.getValueType(), DAG.getUNDEF(SubVec.getValueType()),
+                                           SubVec, CurrentVLVal, DAG.getConstant(Log2SEW, DL, XLenVT), TA_MA);
+
+      // 將反轉後的段插入結果向量（從尾部向前）
+      unsigned InsertOffset = NumElements - Offset - CurrentVL;
+      Result = DAG.getNode(ISD::INSERT_SUBVECTOR, DL, VecVT, Result, ReversedSubVec,
+                           DAG.getConstant(InsertOffset, DL, XLenVT));
+    }
+    return Result;
+  }
+
+  // 情況 3：向量長度 <= VLMAX，直接使用 vrev
   SDValue TA_MA = DAG.getConstant(0, DL, XLenVT);
   SDValue ImplicitDef = DAG.getUNDEF(VecVT);
-
-  // Now, create the custom node with the operands in the order expected by the
-  // pattern:
-  // 1. Implicit destination vector
-  // 2. Source vector (the operand to reverse)
-  // 3. AVL (VL)
-  // 4. Log2SEW as a constant
-  // 5. TA_MA
-
   return DAG.getNode(RISCVISD::VREVERSEMTK_V_VL, DL, VecVT, ImplicitDef,
-                     Op.getOperand(0), VL, DAG.getConstant(Log2SEW, DL, XLenVT),
-                     TA_MA);
+                     Op.getOperand(0), VL, DAG.getConstant(Log2SEW, DL, XLenVT), TA_MA);
 }
+
+
 
 SDValue RISCVTargetLowering::lowerVECTOR_SPLICE(SDValue Op,
                                                 SelectionDAG &DAG) const {
