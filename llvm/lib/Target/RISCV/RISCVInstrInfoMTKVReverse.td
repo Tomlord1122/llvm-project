@@ -1,4 +1,4 @@
-//===----------------------------------------------------------------------===//
+//===----------------------------------------------------------------------===// 
 // try try VREV instructions
 //===----------------------------------------------------------------------===//
 // Define the base class for all reverse instructions
@@ -7,15 +7,15 @@ class RVInstV_MTK<bits<6> funct6, bits<5> vs1, RISCVVFormat opv, dag outs,
     : RVInst<outs, ins, opcodestr, argstr, [], InstFormatR> {
   bits<5> vs2;
   bits<5> vd;
-  bit vm;
+  bit vm = 0b1;
 
   let Inst{31-26} = funct6;
-  let Inst{25} = vm;
+  let Inst{25} = vm; // value 1 means don't use mask
   let Inst{24-20} = vs2;
   let Inst{19-15} = vs1;
-  let Inst{14-12} = opv.Value; // 0b010
+  let Inst{14-12} = opv.Value; // 0b010 -> Defined in RISCVInstrFormatsV.td
   let Inst{11-7} = vd;
-  let Inst{6-0} = OPC_OP_V_MTK.Value; // 0b0101011
+  let Inst{6-0} = OPC_OP_V_MTK.Value; // 0b0101011 -> Defined in RISCVInstrFormats.td
 
   let Uses = [VTYPE, VL];
   let RVVConstraint = VMConstraint;
@@ -27,8 +27,8 @@ let hasSideEffects = 0, mayLoad = 1, mayStore = 0 in {
 // op vd, vs2, 
 class VALUVs2_MTK<bits<6> funct6, bits<5> vs1, RISCVVFormat opv, string opcodestr, RegisterClass VRegClass>
     : RVInstV_MTK<funct6, vs1, opv, (outs VRegClass:$vd),
-               (ins VRegClass:$vs2, VMaskOp:$vm),
-               opcodestr, "$vd, $vs2$vm">;
+               (ins VRegClass:$vs2),
+               opcodestr, "$vd, $vs2">;
 }
 
 
@@ -44,6 +44,7 @@ multiclass VREVE_EEW<bits<2> eew_enc, int eew> {
               "vrev"#eew#"m8", VRM8>;
 }
 
+// VREV_V_e8M1, VREV_V_e8M2, VREV_V_e8M4, VREV_V_e8M8 -> vrev8m1, vrev8m2, vrev8m4, vrev8m8
 defm VREV_V_e8 : VREVE_EEW<0b00, 8>;
 defm VREV_V_e16 : VREVE_EEW<0b01, 16>;
 defm VREV_V_e32 : VREVE_EEW<0b10, 32>;
@@ -83,31 +84,15 @@ multiclass VPseudoUnaryV_V_REV<LMULInfo m> {
   } 
 }
 
-
-// VREV_V_e8MF2, VREV_V_e8MF4, VREV_V_e8MF8, VREV_V_e16MF4, VREV_V_e16MF2, VREV_V_e32MF2, VREV_V_e16fMF4, VREV_V_e16fMF2, VREV_V_e32fMF2
+defvar MF_CASE = ["_V_e8MF2", "_V_e8MF4", "_V_e8MF8", "_V_e16MF4", "_V_e16MF2", "_V_e32MF2"];
 multiclass VPseudoUnaryV_V_REV_MF {
   let Predicates = [HasVInstructions] in {
-    def "_V_e8MF2" : VPseudoUnaryNoMask<VR, VR>, SchedUnary<"WriteVREV8V", "ReadVREV8V", V_MF2.MX, forceMergeOpRead=true>;
-    def "_V_e8MF2_MASK" : VPseudoUnaryMask<VR, VR>, RISCVMaskedPseudo<MaskIdx=2>,SchedUnary<"WriteVREV8V", "ReadVREV8V", V_MF2.MX, forceMergeOpRead=true>;
-    def "_V_e8MF4" : VPseudoUnaryNoMask<VR, VR>, SchedUnary<"WriteVREV8V", "ReadVREV8V", V_MF4.MX, forceMergeOpRead=true>;
-    def "_V_e8MF4_MASK" : VPseudoUnaryMask<VR, VR>, RISCVMaskedPseudo<MaskIdx=2>,SchedUnary<"WriteVREV8V", "ReadVREV8V", V_MF4.MX, forceMergeOpRead=true>;  
-    def "_V_e8MF8" : VPseudoUnaryNoMask<VR, VR>, SchedUnary<"WriteVREV8V", "ReadVREV8V", V_MF8.MX, forceMergeOpRead=true>;  
-    def "_V_e8MF8_MASK" : VPseudoUnaryMask<VR, VR>, RISCVMaskedPseudo<MaskIdx=2>,SchedUnary<"WriteVREV8V", "ReadVREV8V", V_MF8.MX, forceMergeOpRead=true>;
-    def "_V_e16MF4" : VPseudoUnaryNoMask<VR, VR>, SchedUnary<"WriteVREV8V", "ReadVREV8V", V_MF4.MX, forceMergeOpRead=true>;
-    def "_V_e16MF4_MASK" : VPseudoUnaryMask<VR, VR>, RISCVMaskedPseudo<MaskIdx=2>,SchedUnary<"WriteVREV8V", "ReadVREV8V", V_MF4.MX, forceMergeOpRead=true>;
-    def "_V_e16MF2" : VPseudoUnaryNoMask<VR, VR>, SchedUnary<"WriteVREV8V", "ReadVREV8V", V_MF2.MX, forceMergeOpRead=true>;
-    def "_V_e16MF2_MASK" : VPseudoUnaryMask<VR, VR>, RISCVMaskedPseudo<MaskIdx=2>,SchedUnary<"WriteVREV8V", "ReadVREV8V", V_MF2.MX, forceMergeOpRead=true>;
-    def "_V_e32MF2" : VPseudoUnaryNoMask<VR, VR>, SchedUnary<"WriteVREV8V", "ReadVREV8V", V_MF2.MX, forceMergeOpRead=true>;
-    def "_V_e32MF2_MASK" : VPseudoUnaryMask<VR, VR>, RISCVMaskedPseudo<MaskIdx=2>,SchedUnary<"WriteVREV8V", "ReadVREV8V", V_MF2.MX, forceMergeOpRead=true>;
+    foreach mf_name = MF_CASE in {
+      def mf_name : VPseudoUnaryNoMask<VR, VR>, SchedUnary<"WriteVREV8V", "ReadVREV8V", V_MF2.MX, forceMergeOpRead=true>;
+      def mf_name#"_MASK" : VPseudoUnaryMask<VR, VR>, RISCVMaskedPseudo<MaskIdx=2>,SchedUnary<"WriteVREV8V", "ReadVREV8V", V_MF2.MX, forceMergeOpRead=true>;
+    }
   }
 }
-
-// defm "" : LMULSchedWrites<"WriteVREV8V">;
-// defm "" : LMULSchedReads<"ReadVREV8V">;
-
-// defm "" : LMULWriteRes<"WriteVREV8V", []>;
-// defm "" : LMULReadAdvance<"ReadVREV8V", 0>;
-
 
 defvar MxList_REV = [V_M1, V_M2, V_M4, V_M8];
 
@@ -124,6 +109,8 @@ defm PseudoVREV : VPseudoVREV;
 //===----------------------------------------------------------------------===//
 // try try Pseudo instructions Pattern match
 //===----------------------------------------------------------------------===//
+// VPatUnarySDNode_V
+// VPatUnaryVL_V
 multiclass VPatUnarySDNode_V_REV<SDPatternOperator op, string instruction_name,
                              Predicate predicate = HasVInstructions> {
   foreach vti = [VI8MF8, VI8MF4, VI8MF2, VI8M1, VI8M2, VI8M4, VI8M8, VI16MF4, VI16MF2, VI16M1, VI16M2, VI16M4, VI16M8, VI32MF2, VI32M1, VI32M2, VI32M4, VI32M8, VI64M1, VI64M2, VI64M4, VI64M8,
@@ -132,15 +119,13 @@ multiclass VPatUnarySDNode_V_REV<SDPatternOperator op, string instruction_name,
                                  GetVTypePredicates<vti>.Predicates) in {
       def : Pat<(vti.Vector (op (vti.Vector vti.RegClass:$vs2))),
                 (!cast<Instruction>(instruction_name#"_V_e"#vti.SEW#vti.LMul.MX)
-                   (vti.Vector (IMPLICIT_DEF)),
+                  (vti.Vector (IMPLICIT_DEF)),
                    vti.RegClass:$vs2,
                    vti.AVL, vti.Log2SEW, TA_MA)>;
     }
   }
-
 }
-
 defm : VPatUnarySDNode_V_REV<riscv_vreversemtk_v_vl, "PseudoVREV", HasVInstructions>;
 
 
-
+// Pseudo Instruction PseudoVREV_V_e32M2 -> VREV_V_e32M2
