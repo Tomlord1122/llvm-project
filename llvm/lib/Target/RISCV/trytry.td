@@ -36,9 +36,9 @@ class RVInstV<bits<6> funct6, bits<5> vs1, RISCVVFormat opv, dag outs,
   let Inst{25} = vm;
   let Inst{24-20} = vs2;
   let Inst{19-15} = vs1;
-  let Inst{14-12} = opv.Value;
+  let Inst{14-12} = opv.Value; // 010
   let Inst{11-7} = vd;
-  let Inst{6-0} = OPC_OP_V.Value; 
+  let Inst{6-0} = OPC_OP_V.Value;  // 1010111
 
   let Uses = [VTYPE, VL];
   let RVVConstraint = VMConstraint;
@@ -65,6 +65,7 @@ let Predicates = [HasStdExtZvkb] in {
 //--------------------------------
 // Class related to VPseudoUnaryV_V
 //--------------------------------
+
 // RISCVInstrInfoVPseudos.td
 class PseudoToVInst<string PseudoInst> {
   defvar AffixSubsts = [["Pseudo", ""],
@@ -338,6 +339,4 @@ multiclass VPatUnarySDNode_V<SDPatternOperator op, string instruction_name,
 }
 
 defm : VPatUnarySDNode_V<bswap, "PseudoVREV8", HasStdExtZvkb>;
-
-
 
