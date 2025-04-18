@@ -7,7 +7,7 @@ class RVInstV_MTK<bits<6> funct6, bits<5> vs1, RISCVVFormat opv, dag outs,
     : RVInst<outs, ins, opcodestr, argstr, [], InstFormatR> {
   bits<5> vs2;
   bits<5> vd;
-  bit vm = 0b1;
+  bit vm = 0b1; 
 
   let Inst{31-26} = funct6;
   let Inst{25} = vm; // value 1 means don't use mask
@@ -23,7 +23,7 @@ class RVInstV_MTK<bits<6> funct6, bits<5> vs1, RISCVVFormat opv, dag outs,
 
 // Inherit from the base class and add VRegClass parameter for register class flexibility
 
-let hasSideEffects = 0, mayLoad = 1, mayStore = 0 in {
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in {
 // op vd, vs2, 
 class VALUVs2_MTK<bits<6> funct6, bits<5> vs1, RISCVVFormat opv, string opcodestr, RegisterClass VRegClass>
     : RVInstV_MTK<funct6, vs1, opv, (outs VRegClass:$vd),
@@ -33,37 +33,37 @@ class VALUVs2_MTK<bits<6> funct6, bits<5> vs1, RISCVVFormat opv, string opcodest
 
 
 // vs1 -> 5bits 
-multiclass VREVE_EEW<bits<2> eew_enc, int eew> {
+multiclass VREVE_EEW<bits<2> eew_enc> {
     def M1  : VALUVs2_MTK<0b010010, {eew_enc, 0b000}, OPMVV,
-              "vrev"#eew#"m1", VR>;
+              "vrev.v", VR>;
     def M2  : VALUVs2_MTK<0b010010, {eew_enc, 0b001}, OPMVV,
-              "vrev"#eew#"m2", VR>;
+              "vrev.v", VR>;
     def M4  : VALUVs2_MTK<0b010010, {eew_enc, 0b010}, OPMVV,
-              "vrev"#eew#"m4", VR>;
+              "vrev.v", VR>;
     def M8  : VALUVs2_MTK<0b010010, {eew_enc, 0b011}, OPMVV,
-              "vrev"#eew#"m8", VRM8>;
+              "vrev.v", VRM8>;
 }
 
 // VREV_V_e8M1, VREV_V_e8M2, VREV_V_e8M4, VREV_V_e8M8 -> vrev8m1, vrev8m2, vrev8m4, vrev8m8
-defm VREV_V_e8 : VREVE_EEW<0b00, 8>;
-defm VREV_V_e16 : VREVE_EEW<0b01, 16>;
-defm VREV_V_e32 : VREVE_EEW<0b10, 32>;
-defm VREV_V_e64 : VREVE_EEW<0b11, 64>;
+defm VREV_V_e8 : VREVE_EEW<0b00>;
+defm VREV_V_e16 : VREVE_EEW<0b01>;
+defm VREV_V_e32 : VREVE_EEW<0b10>;
+defm VREV_V_e64 : VREVE_EEW<0b11>;
 
 // Handle the remain cases that LMUL is fractional
 def VREV_V_e8MF2 : VALUVs2_MTK<0b010010, {0b00, 0b111}, OPMVV,
-              "vrev8mf2", VR>;
+              "vrev.v", VR>;
 def VREV_V_e8MF4 : VALUVs2_MTK<0b010010, {0b00, 0b110}, OPMVV,
-              "vrev8mf4", VR>;
+              "vrev.v", VR>;
 def VREV_V_e8MF8 : VALUVs2_MTK<0b010010, {0b00, 0b101}, OPMVV,
-              "vrev8mf8", VR>;
+              "vrev.v", VR>;
 
 def VREV_V_e16MF4 : VALUVs2_MTK<0b010010, {0b01, 0b110}, OPMVV,
-              "vrev16mf4", VR>;
+              "vrev.v", VR>;
 def VREV_V_e16MF2 : VALUVs2_MTK<0b010010, {0b01, 0b111}, OPMVV,
-              "vrev16mf2", VR>;
+              "vrev.v", VR>;
 def VREV_V_e32MF2 : VALUVs2_MTK<0b010010, {0b10, 0b111}, OPMVV,
-              "vrev32mf2", VR>;
+              "vrev.v", VR>;
 
 
 
@@ -84,15 +84,40 @@ multiclass VPseudoUnaryV_V_REV<LMULInfo m> {
   } 
 }
 
-defvar MF_CASE = ["_V_e8MF2", "_V_e8MF4", "_V_e8MF8", "_V_e16MF4", "_V_e16MF2", "_V_e32MF2"];
+// Define a class to hold the Suffix string and LMULInfo object pair
+class SuffixLmulPair<string suffix, LMULInfo lmul> {
+  string Suffix = suffix;
+  LMULInfo Lmul = lmul;
+}
+
+// Define the list using instances of the SuffixLmulPair class
+defvar MF_PAIRS = [
+  SuffixLmulPair<"_V_e8MF2", V_MF2>,
+  SuffixLmulPair<"_V_e8MF4", V_MF4>,
+  SuffixLmulPair<"_V_e8MF8", V_MF8>,
+  SuffixLmulPair<"_V_e16MF4", V_MF4>,
+  SuffixLmulPair<"_V_e16MF2", V_MF2>,
+  SuffixLmulPair<"_V_e32MF2", V_MF2>
+];
+
 multiclass VPseudoUnaryV_V_REV_MF {
   let Predicates = [HasVInstructions] in {
-    foreach mf_name = MF_CASE in {
-      def mf_name : VPseudoUnaryNoMask<VR, VR>, SchedUnary<"WriteVREV8V", "ReadVREV8V", V_MF2.MX, forceMergeOpRead=true>;
-      def mf_name#"_MASK" : VPseudoUnaryMask<VR, VR>, RISCVMaskedPseudo<MaskIdx=2>,SchedUnary<"WriteVREV8V", "ReadVREV8V", V_MF2.MX, forceMergeOpRead=true>;
+    // Iterate over the list of SuffixLmulPair instances
+    foreach pair = MF_PAIRS in {
+      // Access the fields by their defined names
+      defvar suffix_name = pair.Suffix;
+      defvar lmul_info = pair.Lmul;
+
+      // Define the unmasked pseudo instruction
+      def suffix_name : VPseudoUnaryNoMask<VR, VR>, SchedUnary<"WriteVREV8V", "ReadVREV8V", lmul_info.MX, forceMergeOpRead=true>;
+
+      // Define the masked pseudo instruction
+      def suffix_name # "_MASK" : VPseudoUnaryMask<VR, VR>, RISCVMaskedPseudo<MaskIdx=2>, SchedUnary<"WriteVREV8V", "ReadVREV8V", lmul_info.MX, forceMergeOpRead=true>;
     }
   }
 }
+
+
 
 defvar MxList_REV = [V_M1, V_M2, V_M4, V_M8];
 
