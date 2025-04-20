@@ -82,48 +82,15 @@ let Constraints = "@earlyclobber $vd", RVVConstraint = Vrev in {
 // try try Pseudo instructions
 //===----------------------------------------------------------------------===//
 
-class VPseudoUnaryNoMask_REV<DAGOperand RetClass,
-                         DAGOperand OpClass,
-                         int TargetConstraintType = 1> :
-      Pseudo<(outs RetClass:$rd),
-             (ins RetClass:$merge, OpClass:$rs2,
-                  AVL:$vl, ixlenimm:$sew, ixlenimm:$policy), []>,
-      RISCVVPseudo {
-  let mayLoad = 0;
-  let mayStore = 0;
-  let hasSideEffects = 0;
-  let TargetOverlapConstraintType = TargetConstraintType;
-  let HasVLOp = 1;
-  let HasSEWOp = 1;
-  let HasVecPolicyOp = 1;
-}
-
-
-class VPseudoUnaryMask_REV<VReg RetClass,
-                       VReg OpClass,
-                       int TargetConstraintType = 1> :
-      Pseudo<(outs GetVRegNoV0<RetClass>.R:$rd),
-             (ins GetVRegNoV0<RetClass>.R:$merge, OpClass:$rs2,
-                  VMaskOp:$vm, AVL:$vl, ixlenimm:$sew, ixlenimm:$policy), []>,
-      RISCVVPseudo {
-  let mayLoad = 0;
-  let mayStore = 0;
-  let hasSideEffects = 0;
-  let TargetOverlapConstraintType = TargetConstraintType;
-  let HasVLOp = 1;
-  let HasSEWOp = 1;
-  let HasVecPolicyOp = 1;
-  let UsesMaskPolicy = 1;
-}
 
 // VPseudoUnaryNoMask and VPseudoUnaryMask are defined in RISCVInstrInfoVPseudos.td
 multiclass VPseudoUnaryV_V_REV<LMULInfo m> {
   let VLMul = m.value in {
     foreach eew = [8, 16, 32, 64] in {
-      def "_V_e"#eew#m.MX : VPseudoUnaryNoMask_REV<m.vrclass, m.vrclass> {
+      def "_V_e"#eew#m.MX : VPseudoUnaryNoMask<m.vrclass, m.vrclass> {
         let Predicates = [HasVInstructions];
       }
-      def "_V_e"#eew#m.MX#"_MASK" : VPseudoUnaryMask_REV<m.vrclass, m.vrclass>, RISCVMaskedPseudo<MaskIdx=2> {
+      def "_V_e"#eew#m.MX#"_MASK" : VPseudoUnaryMask<m.vrclass, m.vrclass>, RISCVMaskedPseudo<MaskIdx=2> {
         let Predicates = [HasVInstructions];
       }
     } 
