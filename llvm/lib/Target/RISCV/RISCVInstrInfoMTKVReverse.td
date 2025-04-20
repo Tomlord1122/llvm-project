@@ -57,7 +57,7 @@ def riscv_vreversemtk_v_vl : SDNode<"RISCVISD::VREVERSEMTK_V_VL", SDTVecReverse>
 
 let Constraints = "@earlyclobber $vd", RVVConstraint = Vrev in {
   defm VREV_V_e8 : VREVE_EEW<0b00>;
-  defm VREV_V_e16 : VREVE_EEW<0b01>;
+  defm VREV_V_e16 : VREVE_EEW<0b00>;
   defm VREV_V_e32 : VREVE_EEW<0b10>;
   defm VREV_V_e64 : VREVE_EEW<0b11>;
 
@@ -159,7 +159,7 @@ multiclass VPatUnarySDNode_V_REV<SDPatternOperator op, string instruction_name,
                 (!cast<Instruction>(instruction_name#"_V_e"#vti.SEW#vti.LMul.MX)
                   (vti.Vector (IMPLICIT_DEF)),
                    vti.RegClass:$vs2,
-                   vti.AVL, vti.Log2SEW, TA_MA)>; // 
+                   vti.AVL, vti.Log2SEW, TA_MA)>; 
     }
   }
 }
