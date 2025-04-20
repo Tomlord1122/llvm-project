@@ -44,40 +44,86 @@ multiclass VREVE_EEW<bits<2> eew_enc> {
               "vrev.v", VRM8>;
 }
 
+
+def Vrev     : RISCVVConstraint<!or(VS2Constraint.Value,
+                                        VMConstraint.Value)>;
+
+// Usually it will be defined in RISCVInstrInfo.td
+// SDTVecReverse is defined in TargetSelectionDAG.td
+def riscv_vreversemtk_v_vl : SDNode<"RISCVISD::VREVERSEMTK_V_VL", SDTVecReverse>;
+
+
 // VREV_V_e8M1, VREV_V_e8M2, VREV_V_e8M4, VREV_V_e8M8 -> vrev8m1, vrev8m2, vrev8m4, vrev8m8
-defm VREV_V_e8 : VREVE_EEW<0b00>;
-defm VREV_V_e16 : VREVE_EEW<0b01>;
-defm VREV_V_e32 : VREVE_EEW<0b10>;
-defm VREV_V_e64 : VREVE_EEW<0b11>;
 
-// Handle the remain cases that LMUL is fractional
-def VREV_V_e8MF2 : VALUVs2_MTK<0b010010, {0b00, 0b111}, OPMVV,
-              "vrev.v", VR>;
-def VREV_V_e8MF4 : VALUVs2_MTK<0b010010, {0b00, 0b110}, OPMVV,
-              "vrev.v", VR>;
-def VREV_V_e8MF8 : VALUVs2_MTK<0b010010, {0b00, 0b101}, OPMVV,
-              "vrev.v", VR>;
+let Constraints = "@earlyclobber $vd", RVVConstraint = Vrev in {
+  defm VREV_V_e8 : VREVE_EEW<0b00>;
+  defm VREV_V_e16 : VREVE_EEW<0b01>;
+  defm VREV_V_e32 : VREVE_EEW<0b10>;
+  defm VREV_V_e64 : VREVE_EEW<0b11>;
 
-def VREV_V_e16MF4 : VALUVs2_MTK<0b010010, {0b01, 0b110}, OPMVV,
-              "vrev.v", VR>;
-def VREV_V_e16MF2 : VALUVs2_MTK<0b010010, {0b01, 0b111}, OPMVV,
-              "vrev.v", VR>;
-def VREV_V_e32MF2 : VALUVs2_MTK<0b010010, {0b10, 0b111}, OPMVV,
-              "vrev.v", VR>;
+  // Handle the remain cases that LMUL is fractional
+  def VREV_V_e8MF2 : VALUVs2_MTK<0b010010, {0b00, 0b111}, OPMVV,
+                "vrev.v", VR>;
+  def VREV_V_e8MF4 : VALUVs2_MTK<0b010010, {0b00, 0b110}, OPMVV,
+                "vrev.v", VR>;
+  def VREV_V_e8MF8 : VALUVs2_MTK<0b010010, {0b00, 0b101}, OPMVV,
+                "vrev.v", VR>;
 
+  def VREV_V_e16MF4 : VALUVs2_MTK<0b010010, {0b01, 0b110}, OPMVV,
+                "vrev.v", VR>;
+  def VREV_V_e16MF2 : VALUVs2_MTK<0b010010, {0b01, 0b111}, OPMVV,
+                "vrev.v", VR>;
+  def VREV_V_e32MF2 : VALUVs2_MTK<0b010010, {0b10, 0b111}, OPMVV,
+                "vrev.v", VR>;
+}
 
 
 //===----------------------------------------------------------------------===//
 // try try Pseudo instructions
 //===----------------------------------------------------------------------===//
 
+class VPseudoUnaryNoMask_REV<DAGOperand RetClass,
+                         DAGOperand OpClass,
+                         int TargetConstraintType = 1> :
+      Pseudo<(outs RetClass:$rd),
+             (ins RetClass:$merge, OpClass:$rs2,
+                  AVL:$vl, ixlenimm:$sew, ixlenimm:$policy), []>,
+      RISCVVPseudo {
+  let mayLoad = 0;
+  let mayStore = 0;
+  let hasSideEffects = 0;
+  let TargetOverlapConstraintType = TargetConstraintType;
+  let HasVLOp = 1;
+  let HasSEWOp = 1;
+  let HasVecPolicyOp = 1;
+}
+
+
+class VPseudoUnaryMask_REV<VReg RetClass,
+                       VReg OpClass,
+                       int TargetConstraintType = 1> :
+      Pseudo<(outs GetVRegNoV0<RetClass>.R:$rd),
+             (ins GetVRegNoV0<RetClass>.R:$merge, OpClass:$rs2,
+                  VMaskOp:$vm, AVL:$vl, ixlenimm:$sew, ixlenimm:$policy), []>,
+      RISCVVPseudo {
+  let mayLoad = 0;
+  let mayStore = 0;
+  let hasSideEffects = 0;
+  let TargetOverlapConstraintType = TargetConstraintType;
+  let HasVLOp = 1;
+  let HasSEWOp = 1;
+  let HasVecPolicyOp = 1;
+  let UsesMaskPolicy = 1;
+}
+
+// VPseudoUnaryNoMask and VPseudoUnaryMask are defined in RISCVInstrInfoVPseudos.td
 multiclass VPseudoUnaryV_V_REV<LMULInfo m> {
   let VLMul = m.value in {
     foreach eew = [8, 16, 32, 64] in {
-      def "_V_e"#eew#m.MX : VPseudoUnaryNoMask<m.vrclass, m.vrclass> {
+      def "_V_e"#eew#m.MX : VPseudoUnaryNoMask_REV<m.vrclass, m.vrclass> {
         let Predicates = [HasVInstructions];
       }
-      def "_V_e"#eew#m.MX#"_MASK" : VPseudoUnaryMask<m.vrclass, m.vrclass>, RISCVMaskedPseudo<MaskIdx=2> {
+      def "_V_e"#eew#m.MX#"_MASK" : VPseudoUnaryMask_REV<m.vrclass, m.vrclass>, RISCVMaskedPseudo<MaskIdx=2> {
         let Predicates = [HasVInstructions];
       }
     } 
@@ -146,7 +192,7 @@ multiclass VPatUnarySDNode_V_REV<SDPatternOperator op, string instruction_name,
                 (!cast<Instruction>(instruction_name#"_V_e"#vti.SEW#vti.LMul.MX)
                   (vti.Vector (IMPLICIT_DEF)),
                    vti.RegClass:$vs2,
-                   vti.AVL, vti.Log2SEW, TA_MA)>;
+                   vti.AVL, vti.Log2SEW, TA_MA)>; // 
     }
   }
 }

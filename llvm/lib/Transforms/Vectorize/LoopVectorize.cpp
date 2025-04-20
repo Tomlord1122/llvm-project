@@ -6471,6 +6471,7 @@ LoopVectorizationCostModel::getInstructionCost(Instruction *I,
   if (isUniformAfterVectorization(I, VF))
     VF = ElementCount::getFixed(1);
 
+  // Check if it's better to not vectorize this specific instruction
   if (VF.isVector() && isProfitableToScalarize(I, VF))
     return InstsToScalarize[VF][I];
 
@@ -6482,8 +6483,11 @@ LoopVectorizationCostModel::getInstructionCost(Instruction *I,
       return getInstructionCost(I, ElementCount::getFixed(1)) *
              VF.getKnownMinValue();
   }
-
+  // Get the result type of the instruction
   Type *RetTy = I->getType();
+
+  // Check if we can use a smaller data type (truncate).
+  // Using a smaller type can sometines be cheaper
   if (canTruncateToMinimalBitwidth(I, VF))
     RetTy = IntegerType::get(RetTy->getContext(), MinBWs[I]);
   auto SE = PSE.getSE();
@@ -8479,7 +8483,6 @@ void LoopVectorizationPlanner::buildVPlansWithVPRecipes(ElementCount MinVF,
                                                         ElementCount MaxVF) {
   assert(OrigLoop->isInnermost() && "Inner loop expected.");
   auto MaxVFTimes2 = MaxVF * 2;
-  // 實際上只會執行一次，因為這個最後 update condition 的時候，直接改成 SubRange.End 
   for (ElementCount VF = MinVF; ElementCount::isKnownLT(VF, MaxVFTimes2);) {
     VFRange SubRange = {VF, MaxVFTimes2};
     if (auto Plan = tryToBuildVPlanWithVPRecipes(SubRange)) {
@@ -10317,7 +10320,7 @@ LoopVectorizeResult LoopVectorizePass::runImpl(
   // Build up a worklist of inner-loops to vectorize. This is necessary as
   // the act of vectorizing or partially unrolling a loop creates new loops
   // and can invalidate iterators across the loops.
-  // 收集需要處理的loops
+  // 收集需要處理的loops，應該是代表這些 Loop 本身不會影響到其他 Loop 的 vectorization
   SmallVector<Loop *, 8> Worklist;
 
   for (Loop *L : *LI)
@@ -10351,10 +10354,6 @@ LoopVectorizeResult LoopVectorizePass::runImpl(
 
 PreservedAnalyses LoopVectorizePass::run(Function &F,
                                          FunctionAnalysisManager &AM) {
-    // output_stream += std::string("abc");
-    // llvm::outs() << output_stream;
-    // output_stream = "";
-    // llvm::outs() << output_stream << "asdfghjk\n";
     auto &LI = AM.getResult<LoopAnalysis>(F);
     // There are no loops in the function. Return before computing other expensive
     // analyses.

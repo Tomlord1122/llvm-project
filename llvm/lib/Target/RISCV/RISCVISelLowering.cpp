@@ -10801,7 +10801,7 @@ SDValue RISCVTargetLowering::lowerVECTOR_REVERSE(SDValue Op,
 
   MVT XLenVT =
       Subtarget.getXLenVT(); // -> In our project, we use RV64, so XLenVT is i64
-  auto [Mask, VL] = getDefaultScalableVLOps(VecVT, DL, DAG, Subtarget);
+  auto [Mask, VL] = getDefaultScalableVLOps(VecVT, DL, DAG, Subtarget); // VL is x0
 
   // Calculate VLMAX-1 for the desired SEW.
   SDValue VLMinus1 =
@@ -10832,66 +10832,66 @@ SDValue RISCVTargetLowering::lowerVECTOR_REVERSE_MTK(SDValue Op,
   SDLoc DL(Op);
   MVT VecVT = Op.getSimpleValueType();
   MVT XLenVT = Subtarget.getXLenVT(); // Needed for constants like Log2SEW, TA_MA
-  // 獲取向量配置資訊
+
   unsigned EltSize = VecVT.getScalarSizeInBits(); // SEW
-  unsigned MinSize = VecVT.getSizeInBits().getKnownMinValue();
   unsigned VectorBitsMax = Subtarget.getRealMaxVLen(); // VLEN
-  unsigned MaxVLMAX = RISCVTargetLowering::computeVLMAX(VectorBitsMax, EltSize, MinSize);
   unsigned Log2SEW = Log2_64(EltSize);
 
-
-  auto [Mask, VL] = getDefaultScalableVLOps(VecVT, DL, DAG, Subtarget);
-
-
-  // Case 1: Handle i1 vector 
+  // Case 1: Handle i1 vector (Keep this standard handling)
   if (VecVT.getVectorElementType() == MVT::i1) {
+    // Widen i1 to i8
     MVT WidenVT = MVT::getVectorVT(MVT::i8, VecVT.getVectorElementCount());
     SDValue Op1 = DAG.getNode(ISD::ZERO_EXTEND, DL, WidenVT, Op.getOperand(0));
+    // Recursively call VECTOR_REVERSE (which will likely hit this lowering again for i8)
     SDValue Op2 = DAG.getNode(ISD::VECTOR_REVERSE, DL, WidenVT, Op1);
+    // Truncate the result back to i1
     return DAG.getNode(ISD::TRUNCATE, DL, VecVT, Op2);
   }
 
-  // Case 2: Handle all other vector types directly using VREVERSEMTK_V_VL
-  // No need to check 
-  ElementCount VecEC = VecVT.getVectorElementCount();
-  unsigned NumElements = VecEC.isScalable() ? VecEC.getKnownMinValue() : VecEC.getFixedValue();
 
-  // 情況 2：向量長度超過 VLMAX，需要分段處理
-  if (NumElements > MaxVLMAX) {
-    // 分段邏輯：將向量分成多個 VLMAX 大小的塊
-    unsigned Iterations = (NumElements + MaxVLMAX - 1) / MaxVLMAX; // ceil(NumElements / MaxVLMAX)
-    SDValue Result = DAG.getUNDEF(VecVT); // 最終結果向量
-
-    for (unsigned i = 0; i < Iterations; ++i) {
-      unsigned Offset = i * MaxVLMAX;
-      unsigned Remaining = NumElements - Offset;
-      unsigned CurrentVL = std::min(Remaining, MaxVLMAX);
-
-      // 提取當前段
-      SDValue SubVec = DAG.getNode(ISD::EXTRACT_SUBVECTOR, DL, 
-                                   MVT::getVectorVT(VecVT.getScalarType(), CurrentVL),
-                                   Op.getOperand(0), DAG.getConstant(Offset, DL, XLenVT));
-
-      // 設定當前 vl
-      SDValue CurrentVLVal = DAG.getConstant(CurrentVL, DL, XLenVT);
-      SDValue TA_MA = DAG.getConstant(0, DL, XLenVT); // Tail Agnostic, Mask Agnostic
-
-      // 使用 vrev 反轉當前段
-      SDValue ReversedSubVec = DAG.getNode(RISCVISD::VREVERSEMTK_V_VL, DL, 
-                                           SubVec.getValueType(), DAG.getUNDEF(SubVec.getValueType()),
-                                           SubVec, CurrentVLVal, DAG.getConstant(Log2SEW, DL, XLenVT), TA_MA);
-
-      // 將反轉後的段插入結果向量（從尾部向前）
-      unsigned InsertOffset = NumElements - Offset - CurrentVL;
-      Result = DAG.getNode(ISD::INSERT_SUBVECTOR, DL, VecVT, Result, ReversedSubVec,
-                           DAG.getConstant(InsertOffset, DL, XLenVT));
+  unsigned MinSize = VecVT.getSizeInBits().getKnownMinValue();
+  unsigned MaxVLMAX = RISCVTargetLowering::computeVLMAX(VectorBitsMax, EltSize, MinSize);
+  if (MaxVLMAX > 256 && EltSize == 8) {
+  // If this is LMUL=8, we have to split before can use vrgatherei16.vv.
+  // Reverse each half, then reassemble them in reverse order.
+  // NOTE: It's also possible that after splitting that VLMAX no longer
+  // requires vrgatherei16.vv.
+  if (MinSize == (8 * RISCV::RVVBitsPerBlock)) {
+    auto [Lo, Hi] = DAG.SplitVectorOperand(Op.getNode(), 0);
+    auto [LoVT, HiVT] = DAG.GetSplitDestVTs(VecVT);
+    Lo = DAG.getNode(ISD::VECTOR_REVERSE, DL, LoVT, Lo);
+    Hi = DAG.getNode(ISD::VECTOR_REVERSE, DL, HiVT, Hi);
+    // Reassemble the low and high pieces reversed.
+    // FIXME: This is a CONCAT_VECTORS.
+    SDValue Res =
+        DAG.getNode(ISD::INSERT_SUBVECTOR, DL, VecVT, DAG.getUNDEF(VecVT), Hi,
+                    DAG.getVectorIdxConstant(0, DL));
+    return DAG.getNode(
+        ISD::INSERT_SUBVECTOR, DL, VecVT, Res, Lo,
+        DAG.getVectorIdxConstant(LoVT.getVectorMinNumElements(), DL));
     }
-    return Result;
   }
 
-  // 情況 3：向量長度 <= VLMAX，直接使用 vrev
+  // Case 2: Handle all other vector types directly using VREVERSEMTK_V_VL
+  // We assume the instruction handles the length specified by runtime 'vl',
+  // which will be set by a vsetvl(i) instruction inserted later based on context.
+  // No need for manual segmentation based on MaxVLMAX.
+
+  // Get the placeholder VL (X0) and default Mask -> Now it just a placeholder, not used
+  // The actual runtime 'vl' will be determined and set via vsetvl(i) later.
+  auto [Mask, VL] = getDefaultScalableVLOps(VecVT, DL, DAG, Subtarget);
+
+  // Define Tail Agnostic (TA) and Mask Agnostic (MA) settings.
+  // TA=0, MA=0 means tail elements are undisturbed, masked elements are undisturbed.
   SDValue TA_MA = DAG.getConstant(0, DL, XLenVT);
+
+  // The VREVERSEMTK_V_VL node needs an implicit definition operand.
   SDValue ImplicitDef = DAG.getUNDEF(VecVT);
+
+  // Create the node representing the custom reverse instruction.
+  // Pass the input vector, the placeholder VL (X0), Log2SEW, and TA/MA settings.
+  // The backend (Pseudo-Instruction Expansion) is responsible for inserting
+  // the correct vsetvl(i) before the actual vreverse instruction.
   return DAG.getNode(RISCVISD::VREVERSEMTK_V_VL, DL, VecVT, ImplicitDef,
                      Op.getOperand(0), VL, DAG.getConstant(Log2SEW, DL, XLenVT), TA_MA);
 }
