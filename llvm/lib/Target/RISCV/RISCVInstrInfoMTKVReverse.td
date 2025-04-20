@@ -37,9 +37,9 @@ multiclass VREVE_EEW<bits<2> eew_enc> {
     def M1  : VALUVs2_MTK<0b010010, {eew_enc, 0b000}, OPMVV,
               "vrev.v", VR>;
     def M2  : VALUVs2_MTK<0b010010, {eew_enc, 0b001}, OPMVV,
-              "vrev.v", VR>;
+              "vrev.v", VRM2>;
     def M4  : VALUVs2_MTK<0b010010, {eew_enc, 0b010}, OPMVV,
-              "vrev.v", VR>;
+              "vrev.v", VRM4>;
     def M8  : VALUVs2_MTK<0b010010, {eew_enc, 0b011}, OPMVV,
               "vrev.v", VRM8>;
 }
