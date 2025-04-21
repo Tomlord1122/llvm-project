@@ -10823,8 +10823,24 @@ SDValue RISCVTargetLowering::lowerVECTOR_REVERSE(SDValue Op,
                                 DAG.getUNDEF(IntVT), Mask, VL);
 
 
+
   bool useVREV = GatherOpc == RISCVISD::VRGATHER_VV_VL;
-  if (useVREV) {
+
+  bool IsWidenedI1 = false;
+  // Only perform the check if the current vector type is i8
+  if (VecVT.getVectorElementType() == MVT::i8) {
+    // Get the input operand to the ISD::VECTOR_REVERSE node
+    SDValue InputOperand = Op.getOperand(0);
+    if (InputOperand.getOpcode() == ISD::ZERO_EXTEND) {
+      MVT SourceVT = InputOperand.getOperand(0).getSimpleValueType();
+      if (SourceVT.isVector() && SourceVT.getVectorElementType() == MVT::i1) {
+        IsWidenedI1 = true; // Mark this as the widened i1 case
+      }
+    }
+  }
+
+
+  if (useVREV && !IsWidenedI1) {
     return DAG.getNode(RISCVISD::VREVERSEMTK_V_VL, DL, VecVT,
                       Op.getOperand(0));
   } else {

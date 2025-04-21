@@ -78,6 +78,7 @@ bool RISCVPostRAExpandPseudo::expandMI(MachineBasicBlock &MBB,
     return expandMovImm(MBB, MBBI);
   case RISCV::PseudoMovAddr:
     return expandMovAddr(MBB, MBBI);
+
   default:
     return false;
   }

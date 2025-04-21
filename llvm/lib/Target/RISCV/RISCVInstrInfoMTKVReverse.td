@@ -41,10 +41,10 @@ def riscv_vreversemtk_v_vl : SDNode<"RISCVISD::VREVERSEMTK_V_VL", SDTVecReverse>
 
 
 // VREV_V_e8M1, VREV_V_e8M2, VREV_V_e8M4, VREV_V_e8M8 -> vrev8m1, vrev8m2, vrev8m4, vrev8m8
-
-let Constraints = "@earlyclobber $vd", RVVConstraint = Vrev in {
+// Constraints = "@earlyclobber $vd"
+// let Constraints = "@earlyclobber $vd", RVVConstraint = Vrev in {
   def VREV_V : VALUVs2_MTK<0b010010, 0b01001, OPMVV, "vrev.v">;
-}
+// }
 
 
 //===----------------------------------------------------------------------===//
