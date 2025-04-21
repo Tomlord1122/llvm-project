@@ -520,6 +520,8 @@ defset list<VTypeInfoToWide> AllWidenableBFloatToFloatVectors = {
 // This represents the information we need in codegen for each pseudo.
 // The definition should be consistent with `struct PseudoInfo` in
 // RISCVInstrInfo.h.
+
+// RISCVInstrInfoVPseudos.td
 class RISCVVPseudo {
   Pseudo Pseudo = !cast<Pseudo>(NAME); // Used as a key.
   Instruction BaseInstr = !cast<Instruction>(PseudoToVInst<NAME>.VInst);
@@ -528,6 +530,7 @@ class RISCVVPseudo {
   bit NeedBeInPseudoTable = 1;
 }
 
+// RISCVInstrInfoVPseudos.td
 // The actual table.
 def RISCVVPseudosTable : GenericTable {
   let FilterClass = "RISCVVPseudo";
@@ -1005,8 +1008,9 @@ class VPseudoNullaryPseudoM<string BaseInst> :
   let BaseInstr = !cast<Instruction>(BaseInst);
   // We exclude them from RISCVVPseudoTable.
   let NeedBeInPseudoTable = 0;
-}
+} 
 
+// In RISCVInstrInfoVPseudos.td
 class VPseudoUnaryNoMask<DAGOperand RetClass,
                          DAGOperand OpClass,
                          string Constraint = "",
@@ -2653,8 +2657,9 @@ multiclass VPseudoBinaryM_VI<LMULInfo m, int TargetConstraintType = 1> {
 
 multiclass VPseudoVGTR_VV_VX_VI {
   defvar constraint = "@earlyclobber $rd";
+  // MxList is the possible LMUL values -> [V_MF8, V_MF4, V_MF2, V_M1, V_M2, V_M4, V_M8];
   foreach m = MxList in {
-    defvar mx = m.MX;
+    defvar mx = m.MX; // mx is LMUL value (e.g. V_MF8 = 1/8, V_MF4 = 1/4, etc.)
     defm "" : VPseudoBinaryV_VX<m, constraint>,
               SchedBinary<"WriteVRGatherVX", "ReadVRGatherVX_data",
                           "ReadVRGatherVX_index", mx, forceMergeOpRead=true>;
@@ -7451,11 +7456,14 @@ defm : VPatBinaryV_VX<"int_riscv_vfslide1down", "PseudoVFSLIDE1DOWN", AllFloatVe
 //===----------------------------------------------------------------------===//
 defm : VPatBinaryV_VV_VX_VI_INT<"int_riscv_vrgather", "PseudoVRGATHER",
                                 AllIntegerVectors, uimm5>;
+                                
+defm : VPatBinaryV_VV_VX_VI_INT<"int_riscv_vrgather", "PseudoVRGATHER",
+                                AllFloatVectors, uimm5>;
+
 defm : VPatBinaryV_VV_INT_EEW<"int_riscv_vrgatherei16_vv", "PseudoVRGATHEREI16",
                               eew=16, vtilist=AllIntegerVectors>;
 
-defm : VPatBinaryV_VV_VX_VI_INT<"int_riscv_vrgather", "PseudoVRGATHER",
-                                AllFloatVectors, uimm5>;
+
 defm : VPatBinaryV_VV_INT_EEW<"int_riscv_vrgatherei16_vv", "PseudoVRGATHEREI16",
                               eew=16, vtilist=AllFloatVectors>;
 //===----------------------------------------------------------------------===//

@@ -604,6 +604,7 @@ enum NodeType {
   ///   RESULT[i] = VECTOR[VECTOR.ElementCount - 1 - i]
   VECTOR_REVERSE,
 
+
   /// VECTOR_SHUFFLE(VEC1, VEC2) - Returns a vector, of the same type as
   /// VEC1/VEC2.  A VECTOR_SHUFFLE node also contains an array of constant int
   /// values that indicate which value (or undef) each result element will

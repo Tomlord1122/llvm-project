@@ -94,6 +94,9 @@ def riscv_add_tprel : SDNode<"RISCVISD::ADD_TPREL",
                                                   SDTCisSameAs<0, 3>,
                                                   SDTCisInt<0>]>>;
 
+// Custom
+// def riscv_vreversemtk_v_vl : SDNode<"RISCVISD::VREVERSEMTK_V_VL", SDTVecReverse>;
+
 //===----------------------------------------------------------------------===//
 // Operand and SDNode transformation definitions.
 //===----------------------------------------------------------------------===//
@@ -2088,8 +2091,6 @@ include "RISCVInstrInfoXwch.td"
 
 include "RISCVInstrGISel.td"
 
-// Tutorial
-include "RISCVInstrInfoFactorial.td"
 
 // MTK try try
 include "RISCVInstrInfoMTKVReverse.td"

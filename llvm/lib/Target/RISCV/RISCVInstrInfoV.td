@@ -531,7 +531,9 @@ class VALUVs2<bits<6> funct6, bits<5> vs1, RISCVVFormat opv, string opcodestr>
     : RVInstV<funct6, vs1, opv, (outs VR:$vd),
                (ins VR:$vs2, VMaskOp:$vm),
                opcodestr, "$vd, $vs2$vm">;
-} // hasSideEffects = 0, mayLoad = 0, mayStore = 0
+}
+// hasSideEffects = 0, mayLoad = 0, mayStore = 0
+
 
 //===----------------------------------------------------------------------===//
 // Combination of instruction classes.

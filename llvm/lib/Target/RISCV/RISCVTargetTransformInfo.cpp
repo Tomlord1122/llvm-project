@@ -613,7 +613,8 @@ InstructionCost RISCVTTIImpl::getShuffleCost(TTI::ShuffleKind Kind,
     // Mask operation additionally required extend and truncate
     InstructionCost ExtendCost = Tp->getElementType()->isIntegerTy(1) ? 3 : 0;
     InstructionCost ShuffleCost = LT.first * (LenCost + GatherCost + ExtendCost);
-    ttilog += "-> ShuffleCost(" + STR(ShuffleCost) + ") = LT.first("+STR(LT.first) + ") * (" + STR(LenCost) + " + " + STR(GatherCost) + " + " + STR(ExtendCost) + ")";
+    // ttilog += "-> ShuffleCost(" + STR(ShuffleCost) + ") = LT.first("+STR(LT.first) + ") * (" + STR(LenCost) + " + " + STR(GatherCost) + " + " + STR(ExtendCost) + ")";
+    ttilog += "-> ShuffleCost(1)";
     ttilog += "\t-> Mask = [";
     for (size_t i = 0; i < Mask.size();i++){
       ttilog += STRI(Mask[i]) + ", ";
@@ -621,7 +622,7 @@ InstructionCost RISCVTTIImpl::getShuffleCost(TTI::ShuffleKind Kind,
     ttilog += "]";
     ttilog += "\t-> ASM: [VID_V, VRSUB_VX, VRGATHER_VV]";
     // return ShuffleCost;
-    return 1;
+    return (LT.second.isFixedLengthVector()) ? ShuffleCost : 1;
   }
   }
   return BaseT::getShuffleCost(Kind, Tp, Mask, CostKind, Index, SubTp);

@@ -157,6 +157,9 @@ def OPC_JAL       : RISCVOpcode<"JAL",       0b1101111>;
 def OPC_SYSTEM    : RISCVOpcode<"SYSTEM",    0b1110011>;
 def OPC_OP_VE     : RISCVOpcode<"OP_VE",     0b1110111>;
 def OPC_CUSTOM_3  : RISCVOpcode<"CUSTOM_3",  0b1111011>;
+// Custom opcode 
+def OPC_OP_V_MTK   : RISCVOpcode<"OP_V_MTK",   0b0101011>;
+
 
 class RVInstCommon<dag outs, dag ins, string opcodestr, string argstr,
                    list<dag> pattern, InstFormat format> : Instruction {
@@ -237,6 +240,7 @@ class RVInst<dag outs, dag ins, string opcodestr, string argstr,
   let Size = 4;
 }
 
+// In RISCVInstrFormats.td
 // Pseudo instructions
 class Pseudo<dag outs, dag ins, list<dag> pattern, string opcodestr = "", string argstr = "">
     : RVInst<outs, ins, opcodestr, argstr, pattern, InstFormatPseudo> {
